@@ -1,0 +1,26 @@
+{
+  "logChannels": {
+    "patrol": "1484958294207627476",
+    "case": "1484958276641886340",
+    "strike": "1484960109254807592",
+    "loa": "1484959947325178028",
+    "transcript": "1484978652931293195"
+  },
+  "statusRoles": [],
+  "ticketCounter": 5,
+  "currentStatus": "watching_hc",
+  "moduleRoleAccess": {
+    "patrol": [],
+    "cases": [],
+    "ia": [],
+    "tickets": [],
+    "moderation": [],
+    "training": [],
+    "logs": [],
+    "bot": [],
+    "analytics": [],
+    "supervisor": [
+      "1300240393484636213"
+    ]
+  }
+}
