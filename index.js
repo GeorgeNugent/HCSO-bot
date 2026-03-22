@@ -3,6 +3,7 @@ import { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuil
 import fs from "fs";
 import http from "node:http";
 import path from "node:path";
+import sharp from "sharp";
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
@@ -184,13 +185,14 @@ function save() {
 }
 
 const MAX_STRIKES = 3;
-const LOG_TYPES = ["patrol", "case", "moderation", "strike", "loa", "transcript", "timeout", "ban", "blacklist", "discord", "commendations"];
+const LOG_TYPES = ["patrol", "case", "moderation", "strike", "loa", "transcript", "timeout", "ban", "blacklist", "discord", "commendations", "memberjoin", "memberleave"];
 const STRIKE_ROLE_IDS = [
     "1485084924921774242",
     "1485084972535648326",
     "1485085025157382244"
 ];
 const STRIKE_ALERT_USER_ID = "967375704486449222";
+const WELCOME_INTERVIEW_CHANNEL_ID = "1482503313491492935";
 const TRAINING_CERTIFICATION_ROLES = {
     SWAT: "1482203107956883573",
     CUI: "1482203107940241479",
@@ -303,6 +305,66 @@ function truncateForField(value, max = 1024) {
     const text = String(value ?? "");
     if (text.length <= max) return text;
     return `${text.slice(0, max - 3)}...`;
+}
+
+function escapeSvgText(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function formatOrdinal(value) {
+    const number = Number(value) || 0;
+    const mod100 = number % 100;
+
+    if (mod100 >= 11 && mod100 <= 13) {
+        return `${number}th`;
+    }
+
+    switch (number % 10) {
+        case 1:
+            return `${number}st`;
+        case 2:
+            return `${number}nd`;
+        case 3:
+            return `${number}rd`;
+        default:
+            return `${number}th`;
+    }
+}
+
+function getMemberDisplayName(memberOrUser) {
+    if (!memberOrUser) return "Unknown User";
+
+    if (typeof memberOrUser.displayName === "string" && memberOrUser.displayName.trim()) {
+        return memberOrUser.displayName.trim();
+    }
+
+    if (typeof memberOrUser.globalName === "string" && memberOrUser.globalName.trim()) {
+        return memberOrUser.globalName.trim();
+    }
+
+    if (memberOrUser.user) {
+        return getMemberDisplayName(memberOrUser.user);
+    }
+
+    return memberOrUser.username || "Unknown User";
+}
+
+async function renderWelcomeImage(memberName) {
+    const safeName = escapeSvgText(memberName);
+    const svg = `
+        <svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+            <rect width="1280" height="720" fill="#05080b"/>
+            <text x="640" y="360" text-anchor="middle" fill="#ffffff" font-size="160" font-family="Brush Script MT, Segoe Script, Pacifico, cursive" font-weight="700">Welcome</text>
+            <text x="640" y="470" text-anchor="middle" fill="#d9e1ea" font-size="56" font-family="Georgia, Times New Roman, serif" letter-spacing="2">${safeName}</text>
+        </svg>
+    `;
+
+    return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
 function formatRoleMentions(roleIds) {
@@ -624,6 +686,28 @@ async function sendCommendationLog(client, guildId, embed) {
         return { ok: true, error: null, channelId };
     } catch (error) {
         return { ok: false, error: error.message || "Unknown error", channelId: getLogChannelId(guildId, "commendations") };
+    }
+}
+
+async function sendConfiguredLogMessage(client, guildId, logType, payload, missingMessage) {
+    try {
+        const channelId = getLogChannelId(guildId, logType);
+        if (!channelId) {
+            console.warn(missingMessage);
+            return { ok: false, error: missingMessage, channelId: null };
+        }
+
+        const channel = client.channels.cache.get(channelId)
+            || await client.channels.fetch(channelId).catch(() => null);
+
+        if (!channel || !channel.isTextBased()) {
+            return { ok: false, error: `Configured ${logType} log channel is invalid.`, channelId };
+        }
+
+        await channel.send(payload);
+        return { ok: true, error: null, channelId };
+    } catch (error) {
+        return { ok: false, error: error.message || `Unknown ${logType} log error`, channelId: getLogChannelId(guildId, logType) };
     }
 }
 
@@ -1285,7 +1369,9 @@ const commands = [
             { name: "Transcript Logs", value: "transcript" },
             { name: "Timeout Logs", value: "timeout" },
             { name: "Discord Logs", value: "discord" },
-            { name: "Commendation Logs", value: "commendations" }
+            { name: "Commendation Logs", value: "commendations" },
+            { name: "Member Join Logs", value: "memberjoin" },
+            { name: "Member Leave Logs", value: "memberleave" }
         )),
 
     new SlashCommandBuilder()
@@ -1359,6 +1445,55 @@ async function sendDiscordEventLog(guildId, embed) {
         console.error("Discord event log send failed:", error);
     }
 }
+
+client.on("guildMemberAdd", async member => {
+    const memberName = getMemberDisplayName(member);
+    const memberCountLabel = formatOrdinal(member.guild.memberCount);
+    const welcomeImage = await renderWelcomeImage(memberName).catch(error => {
+        console.error("Failed to render welcome image:", error);
+        return null;
+    });
+
+    const welcomeEmbed = new EmbedBuilder()
+        .setColor("#2d5a3d")
+        .setTitle(`Welcome ${memberName}`)
+        .setDescription(`Welcome <@${member.id}>!\nYou are our ${memberCountLabel} Deputy.\nPlease look around and post in <#${WELCOME_INTERVIEW_CHANNEL_ID}> for an interview.`)
+        .setTimestamp();
+
+    const payload = {
+        embeds: [welcomeEmbed]
+    };
+
+    if (welcomeImage) {
+        payload.files = [{ attachment: welcomeImage, name: `welcome-${member.id}.png` }];
+        welcomeEmbed.setImage(`attachment://welcome-${member.id}.png`);
+    }
+
+    await sendConfiguredLogMessage(
+        client,
+        member.guild.id,
+        "memberjoin",
+        payload,
+        "Member join log channel not configured."
+    );
+});
+
+client.on("guildMemberRemove", async member => {
+    const memberName = getMemberDisplayName(member);
+    const leaveEmbed = new EmbedBuilder()
+        .setColor("#8b0000")
+        .setTitle(`Goodbye ${memberName}`)
+        .setDescription(`${memberName} has left the server.\nWe hope to see you again.`)
+        .setTimestamp();
+
+    await sendConfiguredLogMessage(
+        client,
+        member.guild.id,
+        "memberleave",
+        { embeds: [leaveEmbed] },
+        "Member leave log channel not configured."
+    );
+});
 
 client.on("ready", () => {
     console.log(`Logged in as ${client.user.tag}`);
@@ -3155,12 +3290,17 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 const row3 = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId("dashboard_logs_ia").setLabel("Set IA Log").setStyle(ButtonStyle.Primary),
                     new ButtonBuilder().setCustomId("dashboard_logs_commendations").setLabel("Set Commendation Log").setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId("dashboard_logs_memberjoin").setLabel("Set Member Join Log").setStyle(ButtonStyle.Success)
+                );
+
+                const row4 = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId("dashboard_logs_memberleave").setLabel("Set Member Leave Log").setStyle(ButtonStyle.Danger),
                     new ButtonBuilder().setCustomId("dashboard_back").setLabel("← Back").setStyle(ButtonStyle.Secondary)
                 );
 
                 return interaction.update({
                     embeds: [logsEmbed],
-                    components: [row1, row2, row3]
+                    components: [row1, row2, row3, row4]
                 });
             }
 
@@ -3706,7 +3846,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     discord: "Discord Logs",
                     ticket: "Ticket Logs",
                     ia: "IA Logs",
-                    commendations: "Commendation Logs"
+                    commendations: "Commendation Logs",
+                    memberjoin: "Member Join Logs",
+                    memberleave: "Member Leave Logs"
                 };
                 
                 const currentChannel = getLogChannelId(interaction.guildId, logType);
@@ -5034,7 +5176,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 const errorEmbed = new EmbedBuilder()
                     .setColor("#8b0000")
                     .setTitle("❌ Invalid Log Type")
-                    .setDescription("Valid options: patrol, case, moderation, loa, transcript, timeout, discord.")
+                    .setDescription("Valid options: patrol, case, moderation, loa, transcript, timeout, discord, commendations, memberjoin, memberleave.")
                     .setTimestamp();
                 return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
             }
@@ -5054,13 +5196,19 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 ban: "Ban Logs",
                 blacklist: "Blacklist Logs",
                 discord: "Discord Logs",
-                commendations: "Commendation Logs"
+                commendations: "Commendation Logs",
+                memberjoin: "Member Join",
+                memberleave: "Member Leave"
             };
 
             const successEmbed = new EmbedBuilder()
                 .setColor("#2d5a3d")
                 .setTitle("✅ Log Channel Updated")
-                .setDescription(`**${typeNames[logType]}** - <#${channelId}> - logs will be sent to this channel from now`)
+                .addFields(
+                    { name: "Log Type", value: typeNames[logType], inline: true },
+                    { name: "New Channel", value: `<#${channelId}>`, inline: true },
+                    { name: "Updated By", value: `<@${interaction.user.id}>`, inline: true }
+                )
                 .setTimestamp();
 
             await interaction.reply({ embeds: [successEmbed] });
