@@ -200,6 +200,52 @@ async function syncUserStrikeRoles(guild, userId, strikeCount) {
     };
 }
 
+async function clearAllStrikeRoles(guild, userId) {
+    if (!guild) {
+        return { ok: false, errors: ["No guild context available."] };
+    }
+
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member) {
+        return { ok: false, errors: ["Target user is not a member of this server."] };
+    }
+
+    const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
+    if (!me) {
+        return { ok: false, errors: ["Could not resolve bot member in this server."] };
+    }
+
+    if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+        return { ok: false, errors: ["Bot is missing Manage Roles permission."] };
+    }
+
+    const errors = [];
+
+    for (const roleId of STRIKE_ROLE_IDS) {
+        const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+        if (!role) {
+            errors.push(`Role not found: ${roleId}`);
+            continue;
+        }
+
+        if (me.roles.highest.comparePositionTo(role) <= 0) {
+            errors.push(`Bot role must be above ${role.name} (${role.id})`);
+            continue;
+        }
+
+        if (member.roles.cache.has(roleId)) {
+            await member.roles.remove(roleId).catch(err => {
+                errors.push(`Failed to remove ${role.name} (${role.id}): ${err.message}`);
+            });
+        }
+    }
+
+    return {
+        ok: errors.length === 0,
+        errors
+    };
+}
+
 async function notifyOverStrikeAttempt(client, userId, currentStrikeCount, attemptedById, reason, source) {
     try {
         const alertUser = await client.users.fetch(STRIKE_ALERT_USER_ID).catch(() => null);
@@ -4794,7 +4840,13 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
         const removed = Math.min(amount, strikeEntries.length);
         strikeEntries.splice(0, removed);
         saveStrikes();
+
+        // Always clear all strike roles first to avoid stale role states.
+        const clearRolesResult = await clearAllStrikeRoles(interaction.guild, user.id);
+
+        // Re-apply the proper role state for remaining strikes.
         const roleSync = await syncUserStrikeRoles(interaction.guild, user.id, strikeEntries.length);
+        const roleErrors = [...clearRolesResult.errors, ...roleSync.errors];
 
         const removedRoleLabel = removed > 0 ? `${removed}` : "0";
 
@@ -4809,10 +4861,10 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             )
             .setTimestamp();
 
-        if (!roleSync.ok && roleSync.errors.length > 0) {
+        if (roleErrors.length > 0) {
             embed.addFields({
                 name: "Role Sync Warning",
-                value: roleSync.errors.slice(0, 2).join("\n").slice(0, 1024),
+                value: roleErrors.slice(0, 2).join("\n").slice(0, 1024),
                 inline: false
             });
         }
