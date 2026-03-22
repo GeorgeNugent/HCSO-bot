@@ -355,7 +355,7 @@ async function sendStrikeLog(client, guildId, embed) {
         const strikeChannelId = getLogChannelId(guildId, "strike");
         if (!strikeChannelId) {
             console.warn(`[strike-log] No strike log channel configured for guild ${guildId}`);
-            return false;
+            return { ok: false, error: "No strike log channel configured.", channelId: null };
         }
 
         const strikeChannel = client.channels.cache.get(strikeChannelId)
@@ -363,14 +363,27 @@ async function sendStrikeLog(client, guildId, embed) {
 
         if (!strikeChannel || !strikeChannel.isTextBased()) {
             console.warn(`[strike-log] Strike log channel not found or not text-based: ${strikeChannelId}`);
-            return false;
+            return { ok: false, error: `Configured strike log channel is invalid: ${strikeChannelId}`, channelId: strikeChannelId };
+        }
+
+        if (strikeChannel.guild && strikeChannel.guild.members.me) {
+            const permissions = strikeChannel.permissionsFor(strikeChannel.guild.members.me);
+            if (!permissions?.has(PermissionFlagsBits.ViewChannel)) {
+                return { ok: false, error: `Bot cannot view <#${strikeChannelId}>.`, channelId: strikeChannelId };
+            }
+            if (!permissions.has(PermissionFlagsBits.SendMessages)) {
+                return { ok: false, error: `Bot cannot send messages in <#${strikeChannelId}>.`, channelId: strikeChannelId };
+            }
+            if (!permissions.has(PermissionFlagsBits.EmbedLinks)) {
+                return { ok: false, error: `Bot is missing Embed Links in <#${strikeChannelId}>.`, channelId: strikeChannelId };
+            }
         }
 
         await strikeChannel.send({ embeds: [embed] });
-        return true;
+        return { ok: true, error: null, channelId: strikeChannelId };
     } catch (error) {
         console.error("[strike-log] Failed to send strike log:", error);
-        return false;
+        return { ok: false, error: error.message || "Unknown strike log error", channelId: getLogChannelId(guildId, "strike") };
     }
 }
 
@@ -1953,7 +1966,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                         )
                         .setTimestamp();
 
-                    await sendStrikeLog(interaction.client, interaction.guildId, overLimitLogEmbed);
+                    const overLimitLogResult = await sendStrikeLog(interaction.client, interaction.guildId, overLimitLogEmbed);
 
                     const limitEmbed = new EmbedBuilder()
                         .setColor("#8b0000")
@@ -1964,6 +1977,14 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                             { name: "Status", value: `Maximum strikes reached (${MAX_STRIKES}/${MAX_STRIKES})`, inline: false }
                         )
                         .setTimestamp();
+
+                    if (!overLimitLogResult.ok) {
+                        limitEmbed.addFields({
+                            name: "Log Warning",
+                            value: overLimitLogResult.error.slice(0, 1024),
+                            inline: false
+                        });
+                    }
 
                     return interaction.reply({ embeds: [limitEmbed], flags: MessageFlags.Ephemeral });
                 }
@@ -2012,7 +2033,15 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     )
                     .setTimestamp();
 
-                await sendStrikeLog(interaction.client, interaction.guildId, strikeLogEmbed);
+                const strikeLogResult = await sendStrikeLog(interaction.client, interaction.guildId, strikeLogEmbed);
+
+                if (!strikeLogResult.ok) {
+                    embed.addFields({
+                        name: "Log Warning",
+                        value: strikeLogResult.error.slice(0, 1024),
+                        inline: false
+                    });
+                }
 
                 return interaction.reply({
                     embeds: [embed],
@@ -4952,7 +4981,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 )
                 .setTimestamp();
 
-            await sendStrikeLog(interaction.client, interaction.guildId, overLimitLogEmbed);
+            const overLimitLogResult = await sendStrikeLog(interaction.client, interaction.guildId, overLimitLogEmbed);
 
             const embed = new EmbedBuilder()
                 .setColor("#8b0000")
@@ -4963,6 +4992,15 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     { name: "Status", value: `Maximum strikes reached (${MAX_STRIKES}/${MAX_STRIKES})`, inline: false }
                 )
                 .setTimestamp();
+
+            if (!overLimitLogResult.ok) {
+                embed.addFields({
+                    name: "Log Warning",
+                    value: overLimitLogResult.error.slice(0, 1024),
+                    inline: false
+                });
+            }
+
             return interaction.reply({ embeds: [embed] });
         }
 
@@ -5011,7 +5049,15 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 { name: "Source", value: "/strike command", inline: true }
             )
             .setTimestamp();
-        await sendStrikeLog(interaction.client, interaction.guildId, logEmbed);
+        const strikeLogResult = await sendStrikeLog(interaction.client, interaction.guildId, logEmbed);
+
+        if (!strikeLogResult.ok) {
+            embed.addFields({
+                name: "Log Warning",
+                value: strikeLogResult.error.slice(0, 1024),
+                inline: false
+            });
+        }
     }
 
     // /strike-remove
@@ -5075,7 +5121,15 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 { name: "Source", value: "/strike-remove command", inline: true }
             )
             .setTimestamp();
-        await sendStrikeLog(interaction.client, interaction.guildId, strikeRemoveLogEmbed);
+        const strikeRemoveLogResult = await sendStrikeLog(interaction.client, interaction.guildId, strikeRemoveLogEmbed);
+
+        if (!strikeRemoveLogResult.ok) {
+            embed.addFields({
+                name: "Log Warning",
+                value: strikeRemoveLogResult.error.slice(0, 1024),
+                inline: false
+            });
+        }
     }
 
     // /strike-logs
