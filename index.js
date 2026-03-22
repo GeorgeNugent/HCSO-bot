@@ -180,6 +180,16 @@ const STRIKE_ROLE_IDS = [
     "1485085025157382244"
 ];
 const STRIKE_ALERT_USER_ID = "967375704486449222";
+const TRAINING_CERTIFICATION_ROLES = {
+    SWAT: "1482203107956883573",
+    CUI: "1482203107940241479",
+    K9: "1482203107906551939",
+    "TRAFFIC ENFORCEMENT": "1482203107885715618",
+    "SPEED ENFORCEMENT": "1482203107873259576",
+    "INTERNAL AFFAIRS": "1482203107835514980"
+};
+const TRAINING_CERTIFICATION_ROLE_IDS = Object.values(TRAINING_CERTIFICATION_ROLES);
+const TRAINING_NO_CERT_ROLE_ID = "1482203107956883574";
 
 function getGuildStrikeStore(guildId) {
     if (!guildId) return null;
@@ -294,6 +304,76 @@ function extractRoleIdsFromAuditValue(auditValue) {
     return auditValue
         .map(role => role?.id)
         .filter(Boolean);
+}
+
+function normalizeTrainingCertInput(value) {
+    return String(value || "")
+        .toUpperCase()
+        .replace(/[-_]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function resolveTrainingCertificationRoleId(inputValue) {
+    const directInput = String(inputValue || "").trim();
+    if (TRAINING_CERTIFICATION_ROLE_IDS.includes(directInput)) {
+        return directInput;
+    }
+
+    const normalized = normalizeTrainingCertInput(inputValue);
+    const aliasToCanonical = {
+        "K 9": "K9",
+        "K-9": "K9",
+        IA: "INTERNAL AFFAIRS",
+        INTERNALAFFAIRS: "INTERNAL AFFAIRS",
+        TRAFFIC: "TRAFFIC ENFORCEMENT",
+        SPEED: "SPEED ENFORCEMENT"
+    };
+
+    const canonical = aliasToCanonical[normalized] || normalized;
+    return TRAINING_CERTIFICATION_ROLES[canonical] || null;
+}
+
+function getTrainingCertificationName(roleId) {
+    const entry = Object.entries(TRAINING_CERTIFICATION_ROLES)
+        .find(([, id]) => id === roleId);
+    return entry ? entry[0] : roleId;
+}
+
+async function syncNoTrainingCertificationRole(guild, member, me) {
+    const noCertRole = guild.roles.cache.get(TRAINING_NO_CERT_ROLE_ID)
+        || await guild.roles.fetch(TRAINING_NO_CERT_ROLE_ID).catch(() => null);
+
+    if (!noCertRole) {
+        return { action: "none", warning: `No-cert role not found: ${TRAINING_NO_CERT_ROLE_ID}` };
+    }
+
+    if (me.roles.highest.comparePositionTo(noCertRole) <= 0) {
+        return { action: "none", warning: `Bot role must be above ${noCertRole.name} (${noCertRole.id})` };
+    }
+
+    const hasAnyCert = TRAINING_CERTIFICATION_ROLE_IDS.some(roleId => member.roles.cache.has(roleId));
+    const hasNoCertRole = member.roles.cache.has(TRAINING_NO_CERT_ROLE_ID);
+
+    if (hasAnyCert && hasNoCertRole) {
+        try {
+            await member.roles.remove(TRAINING_NO_CERT_ROLE_ID);
+            return { action: "removed", warning: null };
+        } catch (error) {
+            return { action: "none", warning: `Failed to remove ${noCertRole.name}: ${error.message}` };
+        }
+    }
+
+    if (!hasAnyCert && !hasNoCertRole) {
+        try {
+            await member.roles.add(TRAINING_NO_CERT_ROLE_ID);
+            return { action: "added", warning: null };
+        } catch (error) {
+            return { action: "none", warning: `Failed to add ${noCertRole.name}: ${error.message}` };
+        }
+    }
+
+    return { action: "none", warning: null };
 }
 
 async function resolveRoleUpdateActor(guild, targetUserId, changedRoleIds, auditChangeKey) {
@@ -2077,6 +2157,144 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 });
             }
 
+            if (interaction.customId === "training_addcert_modal" || interaction.customId === "training_removecert_modal") {
+                if (!interaction.guildId || !interaction.guild) {
+                    return interaction.reply({
+                        content: "❌ This action can only be used in a server.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                const isAddAction = interaction.customId === "training_addcert_modal";
+                const userId = interaction.fields.getTextInputValue("training_user_id").trim();
+                const certInput = interaction.fields.getTextInputValue("training_cert_name").trim();
+                const certRoleId = resolveTrainingCertificationRoleId(certInput);
+
+                if (!certRoleId) {
+                    return interaction.reply({
+                        content: "❌ Invalid certification. Use one of: SWAT, CUI, K9, TRAFFIC ENFORCEMENT, SPEED ENFORCEMENT, INTERNAL AFFAIRS (or one of their role IDs).",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                const guild = interaction.guild;
+                const targetMember = await guild.members.fetch(userId).catch(() => null);
+                if (!targetMember) {
+                    return interaction.reply({
+                        content: "❌ That user is not in this server.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
+                if (!me) {
+                    return interaction.reply({
+                        content: "❌ Could not resolve bot member in this server.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+                    return interaction.reply({
+                        content: "❌ Bot is missing Manage Roles permission.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                if (me.roles.highest.comparePositionTo(targetMember.roles.highest) <= 0) {
+                    return interaction.reply({
+                        content: "❌ Bot role must be above the target member's highest role.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                const certRole = guild.roles.cache.get(certRoleId) || await guild.roles.fetch(certRoleId).catch(() => null);
+                if (!certRole) {
+                    return interaction.reply({
+                        content: `❌ Certification role not found: ${certRoleId}`,
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                if (me.roles.highest.comparePositionTo(certRole) <= 0) {
+                    return interaction.reply({
+                        content: `❌ Bot role must be above ${certRole.name} (${certRole.id}).`,
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                const alreadyHasRole = targetMember.roles.cache.has(certRoleId);
+
+                if (isAddAction && alreadyHasRole) {
+                    return interaction.reply({
+                        content: `❌ <@${targetMember.id}> already has ${certRole.name}.`,
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                if (!isAddAction && !alreadyHasRole) {
+                    return interaction.reply({
+                        content: `❌ <@${targetMember.id}> does not have ${certRole.name}.`,
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                try {
+                    if (isAddAction) {
+                        await targetMember.roles.add(certRoleId);
+                    } else {
+                        await targetMember.roles.remove(certRoleId);
+                    }
+                } catch (error) {
+                    return interaction.reply({
+                        content: `❌ Failed to ${isAddAction ? "add" : "remove"} ${certRole.name}: ${error.message}`,
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                await targetMember.fetch().catch(() => null);
+                const noCertSync = await syncNoTrainingCertificationRole(guild, targetMember, me);
+
+                const embed = new EmbedBuilder()
+                    .setColor(isAddAction ? "#2d5a3d" : "#8b0000")
+                    .setTitle(isAddAction ? "✅ Certification Added" : "✅ Certification Removed")
+                    .addFields(
+                        { name: "Member", value: `<@${targetMember.id}>`, inline: true },
+                        { name: "Certification", value: `${getTrainingCertificationName(certRoleId)} (<@&${certRoleId}>)`, inline: false },
+                        { name: "Updated By", value: `<@${interaction.user.id}>`, inline: true }
+                    )
+                    .setTimestamp();
+
+                if (noCertSync.action === "added") {
+                    embed.addFields({
+                        name: "No-Cert Role Update",
+                        value: `Added <@&${TRAINING_NO_CERT_ROLE_ID}> because member has no certifications.`,
+                        inline: false
+                    });
+                }
+
+                if (noCertSync.action === "removed") {
+                    embed.addFields({
+                        name: "No-Cert Role Update",
+                        value: `Removed <@&${TRAINING_NO_CERT_ROLE_ID}> because member has a certification.`,
+                        inline: false
+                    });
+                }
+
+                if (noCertSync.warning) {
+                    embed.addFields({
+                        name: "No-Cert Sync Warning",
+                        value: noCertSync.warning.slice(0, 1024),
+                        inline: false
+                    });
+                }
+
+                return interaction.reply({
+                    embeds: [embed],
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
             // Handle moderation modal submissions
             if (interaction.customId === "strike_modal") {
                 const userId = interaction.fields.getTextInputValue("strike_user_id");
@@ -3304,16 +3522,54 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 const subAction = interaction.customId.replace("dashboard_training_", "");
                 
                 if (subAction === "addcert") {
-                    return interaction.reply({
-                        content: "🏆 **Issue Certification**\n\nGrant training certifications to members who complete required courses.\n\nCommon certifications:\n• Detective\n• K-9 Handler\n• SWAT\n• Investigation Specialist",
-                        flags: MessageFlags.Ephemeral
-                    });
+                    const modal = new ModalBuilder()
+                        .setCustomId("training_addcert_modal")
+                        .setTitle("Issue Training Certification");
+
+                    const userIdInput = new TextInputBuilder()
+                        .setCustomId("training_user_id")
+                        .setLabel("User ID")
+                        .setPlaceholder("Enter member user ID")
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true);
+
+                    const certInput = new TextInputBuilder()
+                        .setCustomId("training_cert_name")
+                        .setLabel("Certification")
+                        .setPlaceholder("SWAT, CUI, K9, TRAFFIC ENFORCEMENT, SPEED ENFORCEMENT, INTERNAL AFFAIRS")
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true);
+
+                    const row1 = new ActionRowBuilder().addComponents(userIdInput);
+                    const row2 = new ActionRowBuilder().addComponents(certInput);
+                    modal.addComponents(row1, row2);
+
+                    return interaction.showModal(modal);
                 }
                 if (subAction === "removecert") {
-                    return interaction.reply({
-                        content: "❌ **Revoke Certification**\n\nRemove certifications from members when they no longer meet requirements or fail recertification.",
-                        flags: MessageFlags.Ephemeral
-                    });
+                    const modal = new ModalBuilder()
+                        .setCustomId("training_removecert_modal")
+                        .setTitle("Revoke Training Certification");
+
+                    const userIdInput = new TextInputBuilder()
+                        .setCustomId("training_user_id")
+                        .setLabel("User ID")
+                        .setPlaceholder("Enter member user ID")
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true);
+
+                    const certInput = new TextInputBuilder()
+                        .setCustomId("training_cert_name")
+                        .setLabel("Certification")
+                        .setPlaceholder("SWAT, CUI, K9, TRAFFIC ENFORCEMENT, SPEED ENFORCEMENT, INTERNAL AFFAIRS")
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true);
+
+                    const row1 = new ActionRowBuilder().addComponents(userIdInput);
+                    const row2 = new ActionRowBuilder().addComponents(certInput);
+                    modal.addComponents(row1, row2);
+
+                    return interaction.showModal(modal);
                 }
                 if (subAction === "required") {
                     return interaction.reply({
