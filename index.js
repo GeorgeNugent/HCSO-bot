@@ -1,6 +1,7 @@
 import { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ActivityType, ChannelType } from "discord.js";
 import fs from "fs";
 import http from "node:http";
+import path from "node:path";
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
@@ -23,23 +24,62 @@ process.on("uncaughtException", error => {
     console.error("Uncaught exception:", error);
 });
 
+const PROJECT_ROOT = process.cwd();
+const DATA_DIR = process.env.DATA_DIR
+    ? path.resolve(process.env.DATA_DIR)
+    : PROJECT_ROOT;
+const TRANSCRIPTS_DIR = path.join(DATA_DIR, "transcripts");
+
+if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+function getDataFilePath(fileName) {
+    return path.join(DATA_DIR, fileName);
+}
+
+function ensureJsonDataFile(fileName, fallbackValue) {
+    const targetPath = getDataFilePath(fileName);
+    if (fs.existsSync(targetPath)) {
+        return targetPath;
+    }
+
+    const sourcePath = path.join(PROJECT_ROOT, fileName);
+    if (targetPath !== sourcePath && fs.existsSync(sourcePath)) {
+        fs.copyFileSync(sourcePath, targetPath);
+        return targetPath;
+    }
+
+    fs.writeFileSync(targetPath, JSON.stringify(fallbackValue, null, 2));
+    return targetPath;
+}
+
+function readJsonData(fileName, fallbackValue) {
+    const filePath = ensureJsonDataFile(fileName, fallbackValue);
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function writeJsonData(fileName, value) {
+    fs.writeFileSync(getDataFilePath(fileName), JSON.stringify(value, null, 2));
+}
+
 // Load strike data
-const strikes = JSON.parse(fs.readFileSync("./strikes.json", "utf8"));
+const strikes = readJsonData("strikes.json", {});
 
 // Load patrol data
-const patrols = JSON.parse(fs.readFileSync("./patrols.json", "utf8"));
+const patrols = readJsonData("patrols.json", {});
 
 // Load LOA data
-const loa = JSON.parse(fs.readFileSync("./loa.json", "utf8"));
+const loa = readJsonData("loa.json", {});
 
 // Load case data
-const casesData = JSON.parse(fs.readFileSync("./cases.json", "utf8"));
+const casesData = readJsonData("cases.json", { cases: {} });
 
 // Load reports data
-const reports = JSON.parse(fs.readFileSync("./reports.json", "utf8"));
+const reports = readJsonData("reports.json", {});
 
 // Load tickets data
-let tickets = JSON.parse(fs.readFileSync("./tickets.json", "utf8"));
+let tickets = readJsonData("tickets.json", { tickets: {} });
 
 // Initialize userRemoved field for existing tickets that don't have it
 if (tickets.tickets) {
@@ -51,10 +91,10 @@ if (tickets.tickets) {
 }
 
 // Load notes data
-let notesData = JSON.parse(fs.readFileSync("./notes.json", "utf8"));
+let notesData = readJsonData("notes.json", { notes: {} });
 
 // Load config data
-let config = JSON.parse(fs.readFileSync("./config.json", "utf8"));
+let config = readJsonData("config.json", {});
 
 // Initialize config if needed
 if (!config.logChannels) {
@@ -85,35 +125,35 @@ if (!config.ticketCategory) {
 }
 
 function saveStrikes() {
-    fs.writeFileSync("./strikes.json", JSON.stringify(strikes, null, 2));
+    writeJsonData("strikes.json", strikes);
 }
 
 function savePatrols() {
-    fs.writeFileSync("./patrols.json", JSON.stringify(patrols, null, 2));
+    writeJsonData("patrols.json", patrols);
 }
 
 function saveLOA() {
-    fs.writeFileSync("./loa.json", JSON.stringify(loa, null, 2));
+    writeJsonData("loa.json", loa);
 }
 
 function saveCases() {
-    fs.writeFileSync("./cases.json", JSON.stringify(casesData, null, 2));
+    writeJsonData("cases.json", casesData);
 }
 
 function saveReports() {
-    fs.writeFileSync("./reports.json", JSON.stringify(reports, null, 2));
+    writeJsonData("reports.json", reports);
 }
 
 function saveTickets() {
-    fs.writeFileSync("./tickets.json", JSON.stringify(tickets, null, 2));
+    writeJsonData("tickets.json", tickets);
 }
 
 function saveNotes() {
-    fs.writeFileSync("./notes.json", JSON.stringify(notesData, null, 2));
+    writeJsonData("notes.json", notesData);
 }
 
 function saveConfig() {
-    fs.writeFileSync("./config.json", JSON.stringify(config, null, 2));
+    writeJsonData("config.json", config);
 }
 
 function save() {
@@ -643,11 +683,11 @@ async function generateTranscript(channel, ticket) {
 // Save transcript to file
 async function saveTranscript(ticketId, htmlContent) {
     try {
-        if (!fs.existsSync("./transcripts")) {
-            fs.mkdirSync("./transcripts");
+        if (!fs.existsSync(TRANSCRIPTS_DIR)) {
+            fs.mkdirSync(TRANSCRIPTS_DIR, { recursive: true });
         }
         const fileName = `transcript-${ticketId}-${Date.now()}.html`;
-        fs.writeFileSync(`./transcripts/${fileName}`, htmlContent);
+        fs.writeFileSync(path.join(TRANSCRIPTS_DIR, fileName), htmlContent);
         return fileName;
     } catch (error) {
         console.error("Error saving transcript:", error);
