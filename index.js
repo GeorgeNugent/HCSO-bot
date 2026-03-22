@@ -118,6 +118,51 @@ function save() {
     saveConfig();
 }
 
+const MAX_STRIKES = 3;
+const STRIKE_ROLE_IDS = [
+    "1485084924921774242",
+    "1485084972535648326",
+    "1485085025157382244"
+];
+
+function getUserStrikeEntries(userId) {
+    if (!strikes[userId]) {
+        strikes[userId] = [];
+    }
+
+    // Normalize legacy strike format { strikes: [] } into array format.
+    if (!Array.isArray(strikes[userId]) && Array.isArray(strikes[userId].strikes)) {
+        strikes[userId] = strikes[userId].strikes;
+    }
+
+    if (!Array.isArray(strikes[userId])) {
+        strikes[userId] = [];
+    }
+
+    return strikes[userId];
+}
+
+async function syncUserStrikeRoles(guild, userId, strikeCount) {
+    if (!guild) return;
+
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member) return;
+
+    for (let i = 0; i < STRIKE_ROLE_IDS.length; i++) {
+        const roleId = STRIKE_ROLE_IDS[i];
+        const shouldHaveRole = strikeCount >= i + 1;
+        const hasRole = member.roles.cache.has(roleId);
+
+        if (shouldHaveRole && !hasRole) {
+            await member.roles.add(roleId).catch(() => {});
+        }
+
+        if (!shouldHaveRole && hasRole) {
+            await member.roles.remove(roleId).catch(() => {});
+        }
+    }
+}
+
 // Dashboard permission functions
 function canAccessDashboard(member) {
     const botOwnerId = "967375704486449222";
@@ -529,7 +574,7 @@ const commands = [
         .setName("strike-remove")
         .setDescription("Remove strikes from a user")
         .addUserOption(o => o.setName("user").setDescription("User").setRequired(true))
-        .addIntegerOption(o => o.setName("amount").setDescription("Amount").setRequired(true)),
+        .addIntegerOption(o => o.setName("amount").setDescription("Amount").setRequired(true).setMinValue(1)),
 
     new SlashCommandBuilder()
         .setName("strike-logs")
@@ -1646,19 +1691,33 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             if (interaction.customId === "strike_modal") {
                 const userId = interaction.fields.getTextInputValue("strike_user_id");
                 const reason = interaction.fields.getTextInputValue("strike_reason");
+                const strikeEntries = getUserStrikeEntries(userId);
 
-                // Initialize strikes if not exists
-                if (!strikes[userId]) {
-                    strikes[userId] = { strikes: [] };
+                if (strikeEntries.length >= MAX_STRIKES) {
+                    const limitEmbed = new EmbedBuilder()
+                        .setColor("#8b0000")
+                        .setTitle("❌ Strike Limit Reached")
+                        .addFields(
+                            { name: "User", value: `<@${userId}>`, inline: false },
+                            { name: "Current Strikes", value: `${MAX_STRIKES}`, inline: true },
+                            { name: "Status", value: `Maximum strikes reached (${MAX_STRIKES}/${MAX_STRIKES})`, inline: false }
+                        )
+                        .setTimestamp();
+
+                    return interaction.reply({ embeds: [limitEmbed], flags: MessageFlags.Ephemeral });
                 }
 
                 // Add strike
-                strikes[userId].strikes.push({
+                strikeEntries.push({
                     reason,
                     date: new Date().toISOString(),
-                    issuedBy: interaction.user.id
+                    givenBy: interaction.user.id
                 });
                 saveStrikes();
+
+                const totalStrikes = strikeEntries.length;
+                const roleId = STRIKE_ROLE_IDS[totalStrikes - 1] || "None";
+                await syncUserStrikeRoles(interaction.guild, userId, totalStrikes);
 
                 const embed = new EmbedBuilder()
                     .setColor("#FF6B6B")
@@ -1666,7 +1725,8 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     .setDescription(`<@${userId}> has been issued a strike.`)
                     .addFields(
                         { name: "Reason", value: reason, inline: false },
-                        { name: "Total Strikes", value: strikes[userId].strikes.length.toString(), inline: true },
+                        { name: "Total Strikes", value: totalStrikes.toString(), inline: true },
+                        { name: "Role Added", value: `<@&${roleId}>`, inline: true },
                         { name: "Issued By", value: interaction.user.username, inline: true }
                     )
                     .setTimestamp();
@@ -4571,34 +4631,40 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
     if (interaction.commandName === "strike") {
         const user = interaction.options.getUser("user");
         const reason = interaction.options.getString("reason");
+        const strikeEntries = getUserStrikeEntries(user.id);
 
-        if (!strikes[user.id]) strikes[user.id] = [];
-        if (strikes[user.id].length >= 10) {
+        if (strikeEntries.length >= MAX_STRIKES) {
             const embed = new EmbedBuilder()
                 .setColor("#8b0000")
                 .setTitle("❌ Strike Limit Reached")
                 .addFields(
                     { name: "User", value: `<@${user.id}>`, inline: false },
-                    { name: "Current Strikes", value: "10", inline: true },
-                    { name: "Status", value: "Maximum strikes reached (10/10)", inline: false }
+                    { name: "Current Strikes", value: `${MAX_STRIKES}`, inline: true },
+                    { name: "Status", value: `Maximum strikes reached (${MAX_STRIKES}/${MAX_STRIKES})`, inline: false }
                 )
                 .setTimestamp();
             return interaction.reply({ embeds: [embed] });
         }
 
-        strikes[user.id].push({
+        strikeEntries.push({
             reason: reason,
-            givenBy: staff.id
+            givenBy: staff.id,
+            date: new Date().toISOString()
         });
 
-        save();
+        saveStrikes();
+
+        const totalStrikes = strikeEntries.length;
+        const roleId = STRIKE_ROLE_IDS[totalStrikes - 1] || "None";
+        await syncUserStrikeRoles(interaction.guild, user.id, totalStrikes);
 
         const embed = new EmbedBuilder()
             .setColor("#2d5a3d")
             .setTitle("⚖️ Strike Added")
             .addFields(
                 { name: "User", value: `<@${user.id}>`, inline: false },
-                { name: "Total Strikes", value: `${strikes[user.id].length}`, inline: true },
+                { name: "Total Strikes", value: `${totalStrikes}`, inline: true },
+                { name: "Role Added", value: `<@&${roleId}>`, inline: true },
                 { name: "Reason", value: reason, inline: false },
                 { name: "Given By", value: `<@${staff.id}>`, inline: true }
             )
@@ -4614,7 +4680,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 .setTitle("⚖️ Strike Logged")
                 .addFields(
                     { name: "User", value: `<@${user.id}>`, inline: false },
-                    { name: "Strike Count", value: `${strikes[user.id].length}\/10`, inline: true },
+                    { name: "Strike Count", value: `${totalStrikes}\/${MAX_STRIKES}`, inline: true },
                     { name: "Reason", value: reason, inline: false },
                     { name: "Given By", value: `<@${staff.id}>`, inline: true }
                 )
@@ -4627,18 +4693,22 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
     if (interaction.commandName === "strike-remove") {
         const user = interaction.options.getUser("user");
         const amount = interaction.options.getInteger("amount");
+        const strikeEntries = getUserStrikeEntries(user.id);
 
-        if (!strikes[user.id]) strikes[user.id] = [];
-        strikes[user.id].splice(0, amount);
-        save();
+        const removed = Math.min(amount, strikeEntries.length);
+        strikeEntries.splice(0, removed);
+        saveStrikes();
+        await syncUserStrikeRoles(interaction.guild, user.id, strikeEntries.length);
+
+        const removedRoleLabel = removed > 0 ? `${removed}` : "0";
 
         const embed = new EmbedBuilder()
             .setColor("#2d5a3d")
             .setTitle("🗑️ Strikes Removed")
             .addFields(
                 { name: "User", value: `<@${user.id}>`, inline: false },
-                { name: "Strikes Removed", value: `${amount}`, inline: true },
-                { name: "Remaining Strikes", value: `${strikes[user.id].length}`, inline: true },
+                { name: "Strikes Removed", value: removedRoleLabel, inline: true },
+                { name: "Remaining Strikes", value: `${strikeEntries.length}`, inline: true },
                 { name: "Removed By", value: `<@${staff.id}>`, inline: false }
             )
             .setTimestamp();
@@ -4653,8 +4723,8 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 .setTitle("🗑️ Strikes Removed")
                 .addFields(
                     { name: "User", value: `<@${user.id}>`, inline: false },
-                    { name: "Strikes Removed", value: `${amount}`, inline: true },
-                    { name: "Remaining Strikes", value: `${strikes[user.id].length}`, inline: true },
+                    { name: "Strikes Removed", value: removedRoleLabel, inline: true },
+                    { name: "Remaining Strikes", value: `${strikeEntries.length}`, inline: true },
                     { name: "Removed By", value: `<@${staff.id}>`, inline: true }
                 )
                 .setTimestamp();
@@ -4665,7 +4735,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
     // /strike-logs
     if (interaction.commandName === "strike-logs") {
         const user = interaction.options.getUser("user");
-        const logs = strikes[user.id];
+        const logs = getUserStrikeEntries(user.id);
 
         if (!logs || logs.length === 0) {
             const embed = new EmbedBuilder()
@@ -4690,8 +4760,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             );
 
         logs.forEach((entry, i) => {
+            const givenBy = entry.givenBy || entry.issuedBy || "Unknown";
             currentEmbed.addFields(
-                { name: `Strike #${i + 1}`, value: `**Reason:** ${entry.reason}\n**Given By:** <@${entry.givenBy}>`, inline: false }
+                { name: `Strike #${i + 1}`, value: `**Reason:** ${entry.reason}\n**Given By:** <@${givenBy}>`, inline: false }
             );
 
             // If we've added 5 strikes or it's the last one, finalize this embed
