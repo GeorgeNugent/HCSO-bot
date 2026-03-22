@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ActivityType, ChannelType } from "discord.js";
+import { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ActivityType, ChannelType, AuditLogEvent } from "discord.js";
 import fs from "fs";
 import http from "node:http";
 import path from "node:path";
@@ -173,7 +173,7 @@ function save() {
 }
 
 const MAX_STRIKES = 3;
-const LOG_TYPES = ["patrol", "case", "strike", "loa", "transcript", "timeout", "ban", "blacklist"];
+const LOG_TYPES = ["patrol", "case", "moderation", "strike", "loa", "transcript", "timeout", "ban", "blacklist", "discord"];
 const STRIKE_ROLE_IDS = [
     "1485084924921774242",
     "1485084972535648326",
@@ -232,14 +232,32 @@ function getLogChannelId(guildId, logType) {
         config.logChannels = {};
     }
 
+    const lookupOrder = {
+        moderation: ["moderation", "strike", "ban", "blacklist"],
+        strike: ["strike", "moderation"],
+        ban: ["ban", "moderation"],
+        blacklist: ["blacklist", "moderation"]
+    };
+
+    const candidates = lookupOrder[logType] || [logType];
+
     if (guildId) {
         const guildChannels = getGuildLogChannels(guildId);
-        if (guildChannels[logType]) {
-            return guildChannels[logType];
+
+        for (const candidate of candidates) {
+            if (guildChannels[candidate]) {
+                return guildChannels[candidate];
+            }
         }
     }
 
-    return config.logChannels[logType] || null;
+    for (const candidate of candidates) {
+        if (config.logChannels[candidate]) {
+            return config.logChannels[candidate];
+        }
+    }
+
+    return null;
 }
 
 function setLogChannelId(guildId, logType, channelId) {
@@ -248,6 +266,71 @@ function setLogChannelId(guildId, logType, channelId) {
 
     // Keep legacy flat keys populated so older log call sites continue to work.
     config.logChannels[logType] = channelId;
+
+    if (logType === "moderation") {
+        guildChannels.strike = channelId;
+        guildChannels.ban = channelId;
+        guildChannels.blacklist = channelId;
+
+        config.logChannels.strike = channelId;
+        config.logChannels.ban = channelId;
+        config.logChannels.blacklist = channelId;
+    }
+}
+
+function truncateForField(value, max = 1024) {
+    const text = String(value ?? "");
+    if (text.length <= max) return text;
+    return `${text.slice(0, max - 3)}...`;
+}
+
+function formatRoleMentions(roleIds) {
+    if (!roleIds || roleIds.length === 0) return "None";
+    return roleIds.map(id => `<@&${id}>`).join(", ");
+}
+
+function extractRoleIdsFromAuditValue(auditValue) {
+    if (!Array.isArray(auditValue)) return [];
+    return auditValue
+        .map(role => role?.id)
+        .filter(Boolean);
+}
+
+async function resolveRoleUpdateActor(guild, targetUserId, changedRoleIds, auditChangeKey) {
+    if (!guild || !targetUserId || !changedRoleIds || changedRoleIds.length === 0) {
+        return null;
+    }
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+            const auditLogs = await guild.fetchAuditLogs({
+                type: AuditLogEvent.MemberRoleUpdate,
+                limit: 6
+            });
+
+            const now = Date.now();
+            const match = auditLogs.entries.find(entry => {
+                if (!entry || entry.targetId !== targetUserId) return false;
+                if (now - entry.createdTimestamp > 15000) return false;
+
+                const relevantChange = entry.changes?.find(change => change.key === auditChangeKey);
+                if (!relevantChange) return false;
+
+                const roleIdsInAudit = extractRoleIdsFromAuditValue(relevantChange.new);
+                return changedRoleIds.some(roleId => roleIdsInAudit.includes(roleId));
+            });
+
+            if (match) {
+                return match.executorId || null;
+            }
+        } catch (error) {
+            return null;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 1200));
+    }
+
+    return null;
 }
 
 function getUserStrikeEntries(guildId, userId) {
@@ -1009,12 +1092,11 @@ const commands = [
         .addStringOption(o => o.setName("log-type").setDescription("Log type").setRequired(true).addChoices(
             { name: "Patrol Logs", value: "patrol" },
             { name: "Case Logs", value: "case" },
-            { name: "Strike Logs", value: "strike" },
+            { name: "Moderation Logs (Strike/Ban/Blacklist)", value: "moderation" },
             { name: "LOA Logs", value: "loa" },
             { name: "Transcript Logs", value: "transcript" },
             { name: "Timeout Logs", value: "timeout" },
-            { name: "Ban Logs", value: "ban" },
-            { name: "Blacklist Logs", value: "blacklist" }
+            { name: "Discord Logs", value: "discord" }
         )),
 
     new SlashCommandBuilder()
@@ -1067,8 +1149,27 @@ await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
 
 // Create bot
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.MessageContent
+    ]
 });
+
+async function sendDiscordEventLog(guildId, embed) {
+    try {
+        const channelId = getLogChannelId(guildId, "discord");
+        if (!channelId) return;
+
+        const channel = await client.channels.fetch(channelId).catch(() => null);
+        if (!channel || !channel.isTextBased()) return;
+
+        await channel.send({ embeds: [embed] }).catch(() => {});
+    } catch (error) {
+        console.error("Discord event log send failed:", error);
+    }
+}
 
 client.on("ready", () => {
     console.log(`Logged in as ${client.user.tag}`);
@@ -2166,7 +2267,10 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     .setTimestamp();
 
                 // Log to ban channel if configured
-                const banLogChannel = client.channels.cache.get(config.logChannels.ban);
+                const banLogChannelId = getLogChannelId(interaction.guildId, "ban");
+                const banLogChannel = banLogChannelId
+                    ? (client.channels.cache.get(banLogChannelId) || await client.channels.fetch(banLogChannelId).catch(() => null))
+                    : null;
                 if (banLogChannel) {
                     await banLogChannel.send({ embeds: [embed] }).catch(() => {});
                 }
@@ -2192,7 +2296,10 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     .setTimestamp();
 
                 // Log to blacklist channel if configured
-                const blacklistLogChannel = client.channels.cache.get(config.logChannels.blacklist);
+                const blacklistLogChannelId = getLogChannelId(interaction.guildId, "blacklist");
+                const blacklistLogChannel = blacklistLogChannelId
+                    ? (client.channels.cache.get(blacklistLogChannelId) || await client.channels.fetch(blacklistLogChannelId).catch(() => null))
+                    : null;
                 if (blacklistLogChannel) {
                     await blacklistLogChannel.send({ embeds: [embed] }).catch(() => {});
                 }
@@ -3228,9 +3335,11 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 const logNames = {
                     patrol: "Patrol Logs",
                     case: "Case Logs",
+                    moderation: "Moderation Logs",
                     strike: "Strike Logs",
                     loa: "LOA Logs",
                     transcript: "Transcript Logs",
+                    discord: "Discord Logs",
                     ticket: "Ticket Logs",
                     ia: "IA Logs"
                 };
@@ -4615,7 +4724,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 const errorEmbed = new EmbedBuilder()
                     .setColor("#8b0000")
                     .setTitle("❌ Invalid Log Type")
-                    .setDescription("Valid options: patrol, case, strike, loa, transcript, timeout, ban, blacklist.")
+                    .setDescription("Valid options: patrol, case, moderation, loa, transcript, timeout, discord.")
                     .setTimestamp();
                 return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
             }
@@ -4627,12 +4736,14 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             const typeNames = {
                 patrol: "Patrol Logs",
                 case: "Case Logs",
+                moderation: "Moderation Logs",
                 strike: "Strike Logs",
                 loa: "LOA Logs",
                 transcript: "Transcript Logs",
                 timeout: "Timeout Logs",
                 ban: "Ban Logs",
-                blacklist: "Blacklist Logs"
+                blacklist: "Blacklist Logs",
+                discord: "Discord Logs"
             };
 
             const successEmbed = new EmbedBuilder()
@@ -4728,6 +4839,160 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 return interaction.reply({
                     content: "You do not have permission to use this command.",
                     flags: MessageFlags.Ephemeral
+                });
+
+                client.on("guildMemberAdd", async member => {
+                    const embed = new EmbedBuilder()
+                        .setColor("#2d5a3d")
+                        .setTitle("📥 Member Joined")
+                        .addFields(
+                            { name: "Member", value: `<@${member.id}> (${member.user.tag})`, inline: false },
+                            { name: "User ID", value: member.id, inline: true },
+                            { name: "Account Created", value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:F>`, inline: true }
+                        )
+                        .setTimestamp();
+
+                    await sendDiscordEventLog(member.guild.id, embed);
+                });
+
+                client.on("guildMemberRemove", async member => {
+                    const embed = new EmbedBuilder()
+                        .setColor("#8b0000")
+                        .setTitle("📤 Member Left")
+                        .addFields(
+                            { name: "Member", value: `${member.user.tag} (${member.id})`, inline: false },
+                            { name: "User ID", value: member.id, inline: true },
+                            {
+                                name: "Joined Server",
+                                value: member.joinedTimestamp
+                                    ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:F>`
+                                    : "Unknown",
+                                inline: true
+                            }
+                        )
+                        .setTimestamp();
+
+                    await sendDiscordEventLog(member.guild.id, embed);
+                });
+
+                client.on("messageDelete", async message => {
+                    if (!message.guild || message.author?.bot) return;
+
+                    if (message.partial) {
+                        await message.fetch().catch(() => null);
+                    }
+
+                    const authorText = message.author ? `<@${message.author.id}> (${message.author.tag})` : "Unknown (uncached message)";
+                    const content = message.content ? truncateForField(message.content, 1000) : "(No text content or unavailable from cache)";
+                    const attachmentText = message.attachments?.size
+                        ? truncateForField(Array.from(message.attachments.values()).map(att => att.url).join("\n"), 1000)
+                        : "None";
+
+                    const embed = new EmbedBuilder()
+                        .setColor("#b97a00")
+                        .setTitle("🗑️ Message Deleted")
+                        .addFields(
+                            { name: "Author", value: authorText, inline: false },
+                            { name: "Channel", value: `<#${message.channelId}>`, inline: true },
+                            { name: "Message ID", value: message.id, inline: true },
+                            { name: "Content", value: content, inline: false },
+                            { name: "Attachments", value: attachmentText, inline: false }
+                        )
+                        .setTimestamp();
+
+                    await sendDiscordEventLog(message.guild.id, embed);
+                });
+
+                client.on("messageUpdate", async (oldMessage, newMessage) => {
+                    if (!newMessage.guild || newMessage.author?.bot) return;
+
+                    if (oldMessage.partial) {
+                        await oldMessage.fetch().catch(() => null);
+                    }
+
+                    if (newMessage.partial) {
+                        await newMessage.fetch().catch(() => null);
+                    }
+
+                    const before = oldMessage.content ?? "(Unavailable from cache)";
+                    const after = newMessage.content ?? "(Unavailable from cache)";
+
+                    if (before === after) return;
+
+                    const embed = new EmbedBuilder()
+                        .setColor("#2f4f8f")
+                        .setTitle("✏️ Message Edited")
+                        .addFields(
+                            {
+                                name: "Author",
+                                value: newMessage.author ? `<@${newMessage.author.id}> (${newMessage.author.tag})` : "Unknown",
+                                inline: false
+                            },
+                            { name: "Channel", value: `<#${newMessage.channelId}>`, inline: true },
+                            { name: "Message ID", value: newMessage.id, inline: true },
+                            { name: "Before", value: truncateForField(before, 1000), inline: false },
+                            { name: "After", value: truncateForField(after, 1000), inline: false }
+                        )
+                        .setTimestamp();
+
+                    await sendDiscordEventLog(newMessage.guild.id, embed);
+                });
+
+                client.on("guildMemberUpdate", async (oldMember, newMember) => {
+                    if (!newMember.guild) return;
+
+                    const addedRoles = newMember.roles.cache
+                        .filter(role => !oldMember.roles.cache.has(role.id) && role.id !== newMember.guild.id)
+                        .map(role => role.id);
+
+                    const removedRoles = oldMember.roles.cache
+                        .filter(role => !newMember.roles.cache.has(role.id) && role.id !== newMember.guild.id)
+                        .map(role => role.id);
+
+                    if (addedRoles.length === 0 && removedRoles.length === 0) return;
+
+                    let addedBy = null;
+                    let removedBy = null;
+
+                    if (addedRoles.length > 0) {
+                        addedBy = await resolveRoleUpdateActor(newMember.guild, newMember.id, addedRoles, "$add");
+                    }
+
+                    if (removedRoles.length > 0) {
+                        removedBy = await resolveRoleUpdateActor(newMember.guild, newMember.id, removedRoles, "$remove");
+                    }
+
+                    const embed = new EmbedBuilder()
+                        .setColor("#6a3db8")
+                        .setTitle("🛡️ Member Roles Updated")
+                        .addFields(
+                            { name: "Affected Member", value: `<@${newMember.id}> (${newMember.user.tag})`, inline: false }
+                        )
+                        .setTimestamp();
+
+                    if (addedRoles.length > 0) {
+                        embed.addFields(
+                            { name: "Roles Added", value: formatRoleMentions(addedRoles), inline: false },
+                            {
+                                name: "Added By",
+                                value: addedBy ? `<@${addedBy}> (${addedBy})` : "Unknown (missing audit log permission or no recent entry)",
+                                inline: false
+                            }
+                        );
+                    }
+
+                    if (removedRoles.length > 0) {
+                        embed.addFields(
+                            { name: "Roles Removed", value: formatRoleMentions(removedRoles), inline: false },
+                            {
+                                name: "Removed By",
+                                value: removedBy ? `<@${removedBy}> (${removedBy})` : "Unknown (missing audit log permission or no recent entry)",
+                                inline: false
+                            }
+                        );
+                    }
+
+                    await sendDiscordEventLog(newMember.guild.id, embed);
                 });
             }
 
