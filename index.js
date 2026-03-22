@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ActivityType, ChannelType } from "discord.js";
 import fs from "fs";
 import http from "node:http";
@@ -6,6 +7,11 @@ import path from "node:path";
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const PORT = Number(process.env.PORT) || 10000;
+
+if (!TOKEN || !CLIENT_ID) {
+    console.error("Missing required configuration. Set TOKEN and CLIENT_ID in environment variables or a .env file.");
+    process.exit(1);
+}
 
 const healthServer = http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/plain" });
