@@ -199,6 +199,9 @@ function getLogChannelId(guildId, logType) {
 function setLogChannelId(guildId, logType, channelId) {
     const guildChannels = getGuildLogChannels(guildId);
     guildChannels[logType] = channelId;
+
+    // Keep legacy flat keys populated so older log call sites continue to work.
+    config.logChannels[logType] = channelId;
 }
 
 function getUserStrikeEntries(guildId, userId) {
@@ -626,13 +629,13 @@ async function sendTranscript(client, ticket, transcriptFileName, htmlContent) {
             throw new Error("No log channels configured");
         }
 
-        if (!config.logChannels.transcript) {
+        const logChannelId = getLogChannelId(ticket.guildId, "transcript");
+
+        if (!logChannelId) {
             console.error("[SENDTRANSCRIPT] No transcript log channel configured");
             console.error("[SENDTRANSCRIPT] Available log channels:", Object.keys(config.logChannels));
             throw new Error("No transcript log channel configured");
         }
-
-        const logChannelId = config.logChannels.transcript;
         console.log("[SENDTRANSCRIPT] Fetching transcript log channel with ID:", logChannelId);
         
         const logChannel = await client.channels.fetch(logChannelId).catch(err => {
@@ -1042,7 +1045,8 @@ client.on("interactionCreate", async interaction => {
     // Handle button clicks
     if (interaction.isButton()) {
         try {
-            const logChannel = client.channels.cache.get(config.logChannels.patrol);
+            const patrolLogChannelId = getLogChannelId(interaction.guildId, "patrol");
+            const logChannel = patrolLogChannelId ? client.channels.cache.get(patrolLogChannelId) : null;
 
             if (interaction.customId === "start_patrol") {
                 const deputyId = interaction.user.id;
@@ -3104,7 +3108,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     ia: "IA Logs"
                 };
                 
-                const currentChannel = config.logChannels[logType];
+                const currentChannel = getLogChannelId(interaction.guildId, logType);
                 let channelInfo = currentChannel ? `\n✅ Currently set to: <#${currentChannel}>` : "\n❌ Not configured yet";
                 
                 return interaction.reply({
