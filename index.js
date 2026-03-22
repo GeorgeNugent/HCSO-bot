@@ -350,6 +350,30 @@ async function notifyOverStrikeAttempt(client, userId, currentStrikeCount, attem
     }
 }
 
+async function sendStrikeLog(client, guildId, embed) {
+    try {
+        const strikeChannelId = getLogChannelId(guildId, "strike");
+        if (!strikeChannelId) {
+            console.warn(`[strike-log] No strike log channel configured for guild ${guildId}`);
+            return false;
+        }
+
+        const strikeChannel = client.channels.cache.get(strikeChannelId)
+            || await client.channels.fetch(strikeChannelId).catch(() => null);
+
+        if (!strikeChannel || !strikeChannel.isTextBased()) {
+            console.warn(`[strike-log] Strike log channel not found or not text-based: ${strikeChannelId}`);
+            return false;
+        }
+
+        await strikeChannel.send({ embeds: [embed] });
+        return true;
+    } catch (error) {
+        console.error("[strike-log] Failed to send strike log:", error);
+        return false;
+    }
+}
+
 async function safeInteractionErrorReply(interaction, message) {
     const payload = {
         content: message,
@@ -1917,6 +1941,20 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                         "dashboard strike modal"
                     );
 
+                    const overLimitLogEmbed = new EmbedBuilder()
+                        .setColor("#8b0000")
+                        .setTitle("🚨 Over-Strike Attempt Blocked")
+                        .addFields(
+                            { name: "User", value: `<@${userId}>`, inline: false },
+                            { name: "Current Strikes", value: `${strikeEntries.length}/${MAX_STRIKES}`, inline: true },
+                            { name: "Attempted By", value: `<@${interaction.user.id}>`, inline: true },
+                            { name: "Reason", value: reason, inline: false },
+                            { name: "Source", value: "Dashboard Strike Modal", inline: true }
+                        )
+                        .setTimestamp();
+
+                    await sendStrikeLog(interaction.client, interaction.guildId, overLimitLogEmbed);
+
                     const limitEmbed = new EmbedBuilder()
                         .setColor("#8b0000")
                         .setTitle("❌ Strike Limit Reached")
@@ -1961,6 +1999,20 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                         inline: false
                     });
                 }
+
+                const strikeLogEmbed = new EmbedBuilder()
+                    .setColor("#2d5a3d")
+                    .setTitle("⚖️ Strike Logged")
+                    .addFields(
+                        { name: "User", value: `<@${userId}>`, inline: false },
+                        { name: "Strike Count", value: `${totalStrikes}/${MAX_STRIKES}`, inline: true },
+                        { name: "Reason", value: reason, inline: false },
+                        { name: "Given By", value: `<@${interaction.user.id}>`, inline: true },
+                        { name: "Source", value: "Dashboard Strike Modal", inline: true }
+                    )
+                    .setTimestamp();
+
+                await sendStrikeLog(interaction.client, interaction.guildId, strikeLogEmbed);
 
                 return interaction.reply({
                     embeds: [embed],
@@ -4888,6 +4940,20 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 "/strike command"
             );
 
+            const overLimitLogEmbed = new EmbedBuilder()
+                .setColor("#8b0000")
+                .setTitle("🚨 Over-Strike Attempt Blocked")
+                .addFields(
+                    { name: "User", value: `<@${user.id}>`, inline: false },
+                    { name: "Current Strikes", value: `${strikeEntries.length}/${MAX_STRIKES}`, inline: true },
+                    { name: "Attempted By", value: `<@${staff.id}>`, inline: true },
+                    { name: "Reason", value: reason, inline: false },
+                    { name: "Source", value: "/strike command", inline: true }
+                )
+                .setTimestamp();
+
+            await sendStrikeLog(interaction.client, interaction.guildId, overLimitLogEmbed);
+
             const embed = new EmbedBuilder()
                 .setColor("#8b0000")
                 .setTitle("❌ Strike Limit Reached")
@@ -4934,24 +5000,18 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
 
         interaction.reply({ embeds: [embed] });
 
-        // Log to strike channel
-        const strikeChannelId = getLogChannelId(interaction.guildId, "strike");
-        const strikeChannel = strikeChannelId
-            ? (client.channels.cache.get(strikeChannelId) || await client.channels.fetch(strikeChannelId).catch(() => null))
-            : null;
-        if (strikeChannel) {
-            const logEmbed = new EmbedBuilder()
-                .setColor("#2d5a3d")
-                .setTitle("⚖️ Strike Logged")
-                .addFields(
-                    { name: "User", value: `<@${user.id}>`, inline: false },
-                    { name: "Strike Count", value: `${totalStrikes}\/${MAX_STRIKES}`, inline: true },
-                    { name: "Reason", value: reason, inline: false },
-                    { name: "Given By", value: `<@${staff.id}>`, inline: true }
-                )
-                .setTimestamp();
-            strikeChannel.send({ embeds: [logEmbed] }).catch(() => {});
-        }
+        const logEmbed = new EmbedBuilder()
+            .setColor("#2d5a3d")
+            .setTitle("⚖️ Strike Logged")
+            .addFields(
+                { name: "User", value: `<@${user.id}>`, inline: false },
+                { name: "Strike Count", value: `${totalStrikes}/${MAX_STRIKES}`, inline: true },
+                { name: "Reason", value: reason, inline: false },
+                { name: "Given By", value: `<@${staff.id}>`, inline: true },
+                { name: "Source", value: "/strike command", inline: true }
+            )
+            .setTimestamp();
+        await sendStrikeLog(interaction.client, interaction.guildId, logEmbed);
     }
 
     // /strike-remove
@@ -5004,23 +5064,18 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
         await interaction.editReply({ embeds: [embed] });
 
         // Log to strike channel
-        const strikeRemoveChannelId = getLogChannelId(interaction.guildId, "strike");
-        const strikeRemoveChannel = strikeRemoveChannelId
-            ? (client.channels.cache.get(strikeRemoveChannelId) || await client.channels.fetch(strikeRemoveChannelId).catch(() => null))
-            : null;
-        if (strikeRemoveChannel) {
-            const logEmbed = new EmbedBuilder()
-                .setColor("#2d5a3d")
-                .setTitle("🗑️ Strikes Removed")
-                .addFields(
-                    { name: "User", value: `<@${user.id}>`, inline: false },
-                    { name: "Strikes Removed", value: removedRoleLabel, inline: true },
-                    { name: "Remaining Strikes", value: `${strikeEntries.length}`, inline: true },
-                    { name: "Removed By", value: `<@${staff.id}>`, inline: true }
-                )
-                .setTimestamp();
-            strikeRemoveChannel.send({ embeds: [logEmbed] }).catch(() => {});
-        }
+        const strikeRemoveLogEmbed = new EmbedBuilder()
+            .setColor("#2d5a3d")
+            .setTitle("🗑️ Strikes Removed")
+            .addFields(
+                { name: "User", value: `<@${user.id}>`, inline: false },
+                { name: "Strikes Removed", value: removedRoleLabel, inline: true },
+                { name: "Remaining Strikes", value: `${strikeEntries.length}`, inline: true },
+                { name: "Removed By", value: `<@${staff.id}>`, inline: true },
+                { name: "Source", value: "/strike-remove command", inline: true }
+            )
+            .setTimestamp();
+        await sendStrikeLog(interaction.client, interaction.guildId, strikeRemoveLogEmbed);
     }
 
     // /strike-logs
