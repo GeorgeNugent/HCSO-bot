@@ -126,8 +126,12 @@ if (!config.moduleRoleAccess) {
         logs: [],
         bot: [],
         analytics: [],
-        supervisor: []
+        supervisor: [],
+        botOwner: []
     };
+}
+if (!config.moduleRoleAccess.botOwner) {
+    config.moduleRoleAccess.botOwner = [];
 }
 if (!config.ticketCategory) {
     config.ticketCategory = null;
@@ -645,6 +649,7 @@ async function safeInteractionErrorReply(interaction, message) {
 function canAccessDashboard(member) {
     const botOwnerId = "967375704486449222";
     return member.id === botOwnerId || 
+           canAccessBotOwner(member) ||
            member.permissions.has(PermissionFlagsBits.Administrator) || 
            member.roles.cache.some(r => ["admin", "administrator", "supervisor", "ia", "investigator", "sheriff"].some(role => r.name.toLowerCase().includes(role)));
 }
@@ -689,6 +694,23 @@ function canAccessModule(member, moduleType) {
     return (modulePerms[moduleType] || (() => false))();
 }
 
+function canAccessBotOwner(member) {
+    const botOwnerId = "967375704486449222";
+    if (member.id === botOwnerId) {
+        return true;
+    }
+
+    const customRoleIds = config.moduleRoleAccess && config.moduleRoleAccess.botOwner
+        ? config.moduleRoleAccess.botOwner
+        : [];
+
+    if (customRoleIds.includes("everyone")) {
+        return true;
+    }
+
+    return customRoleIds.length > 0 && member.roles.cache.some(r => customRoleIds.includes(r.id));
+}
+
 // Build dashboard button rows showing only modules the user can access
 function buildDashboardComponents(member) {
     const botOwnerId = "967375704486449222";
@@ -708,7 +730,7 @@ function buildDashboardComponents(member) {
 
     const accessible = allModules.filter(m => canAccessModule(member, m.id));
 
-    if (member.id === botOwnerId) {
+    if (canAccessBotOwner(member)) {
         accessible.push({ id: "owner", label: "Bot Owner", emoji: "🔧", style: ButtonStyle.Success });
     }
 
@@ -2800,10 +2822,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
 
             // Handle role configuration modal submissions
             if (interaction.customId.startsWith("role_config_")) {
-                const botOwnerId = "967375704486449222";
-                if (interaction.user.id !== botOwnerId) {
+                if (!canAccessBotOwner(interaction.member)) {
                     return interaction.reply({
-                        content: "❌ Only the bot owner can configure roles.",
+                        content: "❌ You don't have permission to configure Bot Owner roles.",
                         flags: MessageFlags.Ephemeral
                     });
                 }
@@ -2834,7 +2855,8 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     logs: "Logs",
                     bot: "Bot Settings",
                     analytics: "Analytics",
-                    supervisor: "Supervisor"
+                    supervisor: "Supervisor",
+                    botOwner: "Bot Owner Tab"
                 };
 
                 // Format the role IDs for display
@@ -2927,7 +2949,14 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
 
             const moduleType = interaction.customId.replace("dashboard_", "");
 
-            // Check if user has access to this specific module (skip for owner module and owner sub-buttons - they have their own checks)
+            // Check if user has access to this specific module.
+            if ((moduleType === "owner" || moduleType.startsWith("owner_")) && !canAccessBotOwner(interaction.member)) {
+                return interaction.reply({
+                    content: "❌ You don't have permission to access Bot Owner tools.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
             if (!moduleType.startsWith("owner") && !canAccessModule(interaction.member, moduleType)) {
                 return interaction.reply({
                     content: "❌ You don't have permission to access this module.",
@@ -2954,10 +2983,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     new ButtonBuilder().setCustomId("dashboard_back").setLabel("← Back").setStyle(ButtonStyle.Secondary)
                 );
 
-                return interaction.reply({
+                return interaction.update({
                     embeds: [patrolEmbed],
-                    components: [row1, row2],
-                    flags: MessageFlags.Ephemeral
+                    components: [row1, row2]
                 });
             }
 
@@ -2985,10 +3013,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     new ButtonBuilder().setCustomId("dashboard_back").setLabel("← Back").setStyle(ButtonStyle.Secondary)
                 );
 
-                return interaction.reply({
+                return interaction.update({
                     embeds: [casesEmbed],
-                    components: [row1, row2, row3],
-                    flags: MessageFlags.Ephemeral
+                    components: [row1, row2, row3]
                 });
             }
 
@@ -3015,10 +3042,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     new ButtonBuilder().setCustomId("dashboard_back").setLabel("← Back").setStyle(ButtonStyle.Secondary)
                 );
 
-                return interaction.reply({
+                return interaction.update({
                     embeds: [iaEmbed],
-                    components: [row1, row2, row3],
-                    flags: MessageFlags.Ephemeral
+                    components: [row1, row2, row3]
                 });
             }
 
@@ -3041,10 +3067,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     new ButtonBuilder().setCustomId("dashboard_back").setLabel("← Back").setStyle(ButtonStyle.Secondary)
                 );
 
-                return interaction.reply({
+                return interaction.update({
                     embeds: [ticketsEmbed],
-                    components: [row1, row2],
-                    flags: MessageFlags.Ephemeral
+                    components: [row1, row2]
                 });
             }
 
@@ -3071,10 +3096,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     new ButtonBuilder().setCustomId("dashboard_back").setLabel("← Back").setStyle(ButtonStyle.Secondary)
                 );
 
-                return interaction.reply({
+                return interaction.update({
                     embeds: [modEmbed],
-                    components: [row1, row1b, row2],
-                    flags: MessageFlags.Ephemeral
+                    components: [row1, row1b, row2]
                 });
 
 
@@ -3099,10 +3123,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     new ButtonBuilder().setCustomId("dashboard_back").setLabel("← Back").setStyle(ButtonStyle.Secondary)
                 );
 
-                return interaction.reply({
+                return interaction.update({
                     embeds: [trainingEmbed],
-                    components: [row1, row2],
-                    flags: MessageFlags.Ephemeral
+                    components: [row1, row2]
                 });
             }
 
@@ -3135,10 +3158,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     new ButtonBuilder().setCustomId("dashboard_back").setLabel("← Back").setStyle(ButtonStyle.Secondary)
                 );
 
-                return interaction.reply({
+                return interaction.update({
                     embeds: [logsEmbed],
-                    components: [row1, row2, row3],
-                    flags: MessageFlags.Ephemeral
+                    components: [row1, row2, row3]
                 });
             }
 
@@ -3161,10 +3183,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     new ButtonBuilder().setCustomId("dashboard_back").setLabel("← Back").setStyle(ButtonStyle.Secondary)
                 );
 
-                return interaction.reply({
+                return interaction.update({
                     embeds: [botEmbed],
-                    components: [row1, row2],
-                    flags: MessageFlags.Ephemeral
+                    components: [row1, row2]
                 });
             }
 
@@ -3191,10 +3212,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     new ButtonBuilder().setCustomId("dashboard_back").setLabel("← Back").setStyle(ButtonStyle.Secondary)
                 );
 
-                return interaction.reply({
+                return interaction.update({
                     embeds: [analyticsEmbed],
-                    components: [row1, row2, row3],
-                    flags: MessageFlags.Ephemeral
+                    components: [row1, row2, row3]
                 });
             }
 
@@ -3220,10 +3240,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     new ButtonBuilder().setCustomId("dashboard_back").setLabel("← Back").setStyle(ButtonStyle.Secondary)
                 );
 
-                return interaction.reply({
+                return interaction.update({
                     embeds: [supervisorEmbed],
-                    components: [row1, row2, row3],
-                    flags: MessageFlags.Ephemeral
+                    components: [row1, row2, row3]
                 });
             }
 
@@ -3911,15 +3930,6 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
 
             // BOT OWNER SECTION
             if (moduleType === "owner") {
-                // Only allow bot owner
-                const botOwnerId = "967375704486449222";
-                if (interaction.user.id !== botOwnerId) {
-                    return interaction.reply({
-                        content: "❌ Only the bot owner can access this section.",
-                        flags: MessageFlags.Ephemeral
-                    });
-                }
-
                 // Build fields with configured roles
                 const moduleConfigs = [
                     { name: "Patrol Module", key: "patrol" },
@@ -3931,7 +3941,8 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     { name: "Logs Module", key: "logs" },
                     { name: "Bot Settings", key: "bot" },
                     { name: "Analytics Module", key: "analytics" },
-                    { name: "Supervisor Tools", key: "supervisor" }
+                    { name: "Supervisor Tools", key: "supervisor" },
+                    { name: "Bot Owner Tab", key: "botOwner" }
                 ];
 
                 const fields = moduleConfigs.map(module => {
@@ -3950,7 +3961,8 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                             logs: "Accessible to: Admins only",
                             bot: "Accessible to: Admins only",
                             analytics: "Accessible to: Supervisors+",
-                            supervisor: "Accessible to: Supervisors+"
+                            supervisor: "Accessible to: Supervisors+",
+                            botOwner: "Accessible to: Bot owner only (or configured roles)"
                         };
                         accessText = defaults[module.key] || "Accessible to: Admins only";
                     } else if (configuredRoles.includes("everyone")) {
@@ -3988,26 +4000,25 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 );
 
                 const row4 = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId("dashboard_owner_supervisor").setLabel("Configure Supervisor").setStyle(ButtonStyle.Primary)
+                    new ButtonBuilder().setCustomId("dashboard_owner_supervisor").setLabel("Configure Supervisor").setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId("dashboard_owner_botOwner").setLabel("Configure Bot Owner Tab").setStyle(ButtonStyle.Success)
                 );
 
                 const row5 = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId("dashboard_back").setLabel("← Back").setStyle(ButtonStyle.Secondary)
                 );
 
-                return interaction.reply({
+                return interaction.update({
                     embeds: [ownerEmbed],
-                    components: [row1, row2, row3, row4, row5],
-                    flags: MessageFlags.Ephemeral
+                    components: [row1, row2, row3, row4, row5]
                 });
             }
 
             // BOT OWNER CONFIGURATION SUB-BUTTONS
             if (interaction.customId.startsWith("dashboard_owner_")) {
-                const botOwnerId = "967375704486449222";
-                if (interaction.user.id !== botOwnerId) {
+                if (!canAccessBotOwner(interaction.member)) {
                     return interaction.reply({
-                        content: "❌ Only the bot owner can configure roles.",
+                        content: "❌ You don't have permission to configure Bot Owner tools.",
                         flags: MessageFlags.Ephemeral
                     });
                 }
@@ -4023,7 +4034,8 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     logs: "Logs",
                     bot: "Bot Settings",
                     analytics: "Analytics",
-                    supervisor: "Supervisor"
+                    supervisor: "Supervisor",
+                    botOwner: "Bot Owner Tab"
                 };
 
                 // Create modal for role configuration
@@ -4054,10 +4066,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     .setThumbnail(interaction.client.user.displayAvatarURL({ size: 128 }))
                     .setTimestamp();
 
-                return interaction.reply({
+                return interaction.update({
                     embeds: [dashboardEmbed],
-                    components: buildDashboardComponents(interaction.member),
-                    flags: MessageFlags.Ephemeral
+                    components: buildDashboardComponents(interaction.member)
                 });
             }
 
