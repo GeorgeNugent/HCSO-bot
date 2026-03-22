@@ -739,6 +739,11 @@ const client = new Client({
 
 client.on("ready", () => {
     console.log(`Logged in as ${client.user.tag}`);
+
+    // Keep a periodic heartbeat in logs so uptime is visible on hosting dashboards.
+    setInterval(() => {
+        console.log(`[heartbeat] Bot online | uptime=${Math.floor(process.uptime())}s`);
+    }, 5 * 60 * 1000);
     
     // Restore previous status if it exists
     if (config.currentStatus) {
@@ -783,6 +788,10 @@ client.on("ready", () => {
 
 // Handle commands
 client.on("interactionCreate", async interaction => {
+    if (interaction.isChatInputCommand()) {
+        console.log(`[command] /${interaction.commandName} by ${interaction.user.tag} in guild ${interaction.guildId || "DM"}`);
+    }
+
     // Handle button clicks
     if (interaction.isButton()) {
         try {
