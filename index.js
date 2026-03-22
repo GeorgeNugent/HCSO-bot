@@ -143,24 +143,60 @@ function getUserStrikeEntries(userId) {
 }
 
 async function syncUserStrikeRoles(guild, userId, strikeCount) {
-    if (!guild) return;
+    if (!guild) {
+        return { ok: false, errors: ["No guild context available."] };
+    }
 
     const member = await guild.members.fetch(userId).catch(() => null);
-    if (!member) return;
+    if (!member) {
+        return { ok: false, errors: ["Target user is not a member of this server."] };
+    }
+
+    const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
+    if (!me) {
+        return { ok: false, errors: ["Could not resolve bot member in this server."] };
+    }
+
+    if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+        return { ok: false, errors: ["Bot is missing Manage Roles permission."] };
+    }
+
+    const errors = [];
 
     for (let i = 0; i < STRIKE_ROLE_IDS.length; i++) {
         const roleId = STRIKE_ROLE_IDS[i];
         const shouldHaveRole = strikeCount >= i + 1;
+        const role = guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+
+        if (!role) {
+            errors.push(`Role not found: ${roleId}`);
+            continue;
+        }
+
+        if (me.roles.highest.comparePositionTo(role) <= 0) {
+            errors.push(`Bot role must be above ${role.name} (${role.id})`);
+            continue;
+        }
+
         const hasRole = member.roles.cache.has(roleId);
 
         if (shouldHaveRole && !hasRole) {
-            await member.roles.add(roleId).catch(() => {});
+            await member.roles.add(roleId).catch(err => {
+                errors.push(`Failed to add ${role.name} (${role.id}): ${err.message}`);
+            });
         }
 
         if (!shouldHaveRole && hasRole) {
-            await member.roles.remove(roleId).catch(() => {});
+            await member.roles.remove(roleId).catch(err => {
+                errors.push(`Failed to remove ${role.name} (${role.id}): ${err.message}`);
+            });
         }
     }
+
+    return {
+        ok: errors.length === 0,
+        errors
+    };
 }
 
 // Dashboard permission functions
@@ -1717,7 +1753,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
 
                 const totalStrikes = strikeEntries.length;
                 const roleId = STRIKE_ROLE_IDS[totalStrikes - 1] || "None";
-                await syncUserStrikeRoles(interaction.guild, userId, totalStrikes);
+                const roleSync = await syncUserStrikeRoles(interaction.guild, userId, totalStrikes);
 
                 const embed = new EmbedBuilder()
                     .setColor("#FF6B6B")
@@ -1730,6 +1766,14 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                         { name: "Issued By", value: interaction.user.username, inline: true }
                     )
                     .setTimestamp();
+
+                if (!roleSync.ok && roleSync.errors.length > 0) {
+                    embed.addFields({
+                        name: "Role Sync Warning",
+                        value: roleSync.errors.slice(0, 2).join("\n").slice(0, 1024),
+                        inline: false
+                    });
+                }
 
                 return interaction.reply({
                     embeds: [embed],
@@ -4656,7 +4700,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
 
         const totalStrikes = strikeEntries.length;
         const roleId = STRIKE_ROLE_IDS[totalStrikes - 1] || "None";
-        await syncUserStrikeRoles(interaction.guild, user.id, totalStrikes);
+        const roleSync = await syncUserStrikeRoles(interaction.guild, user.id, totalStrikes);
 
         const embed = new EmbedBuilder()
             .setColor("#2d5a3d")
@@ -4669,6 +4713,14 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 { name: "Given By", value: `<@${staff.id}>`, inline: true }
             )
             .setTimestamp();
+
+        if (!roleSync.ok && roleSync.errors.length > 0) {
+            embed.addFields({
+                name: "Role Sync Warning",
+                value: roleSync.errors.slice(0, 2).join("\n").slice(0, 1024),
+                inline: false
+            });
+        }
 
         interaction.reply({ embeds: [embed] });
 
@@ -4698,7 +4750,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
         const removed = Math.min(amount, strikeEntries.length);
         strikeEntries.splice(0, removed);
         saveStrikes();
-        await syncUserStrikeRoles(interaction.guild, user.id, strikeEntries.length);
+        const roleSync = await syncUserStrikeRoles(interaction.guild, user.id, strikeEntries.length);
 
         const removedRoleLabel = removed > 0 ? `${removed}` : "0";
 
@@ -4712,6 +4764,14 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 { name: "Removed By", value: `<@${staff.id}>`, inline: false }
             )
             .setTimestamp();
+
+        if (!roleSync.ok && roleSync.errors.length > 0) {
+            embed.addFields({
+                name: "Role Sync Warning",
+                value: roleSync.errors.slice(0, 2).join("\n").slice(0, 1024),
+                inline: false
+            });
+        }
 
         interaction.reply({ embeds: [embed] });
 
