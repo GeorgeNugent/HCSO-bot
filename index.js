@@ -4,18 +4,16 @@ import http from "node:http";
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
-const PORT = process.env.PORT;
+const PORT = Number(process.env.PORT) || 10000;
 
-if (PORT) {
-    const healthServer = http.createServer((req, res) => {
-        res.writeHead(200, { "Content-Type": "text/plain" });
-        res.end("Bot is running");
-    });
+const healthServer = http.createServer((req, res) => {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("Bot is running");
+});
 
-    healthServer.listen(PORT, () => {
-        console.log(`Health server listening on port ${PORT}`);
-    });
-}
+healthServer.listen(PORT, "0.0.0.0", () => {
+    console.log(`Health server listening on 0.0.0.0:${PORT}`);
+});
 
 // Load strike data
 const strikes = JSON.parse(fs.readFileSync("./strikes.json", "utf8"));
