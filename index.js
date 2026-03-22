@@ -15,6 +15,10 @@ healthServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Health server listening on 0.0.0.0:${PORT}`);
 });
 
+process.on("unhandledRejection", error => {
+    console.error("Unhandled promise rejection:", error);
+});
+
 // Load strike data
 const strikes = JSON.parse(fs.readFileSync("./strikes.json", "utf8"));
 
@@ -299,6 +303,24 @@ async function notifyOverStrikeAttempt(client, userId, currentStrikeCount, attem
         await alertUser.send({ embeds: [alertEmbed] }).catch(() => {});
     } catch (error) {
         console.error("Failed to send over-strike alert DM:", error);
+    }
+}
+
+async function safeInteractionErrorReply(interaction, message) {
+    const payload = {
+        content: message,
+        flags: MessageFlags.Ephemeral
+    };
+
+    try {
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply(payload);
+            return;
+        }
+
+        await interaction.reply(payload);
+    } catch (replyError) {
+        console.error("Failed to send interaction error reply:", replyError);
     }
 }
 
@@ -5150,10 +5172,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
     }
     } catch (error) {
         console.error(error);
-        await interaction.reply({
-            content: `Error: ${error.message}`,
-            flags: MessageFlags.Ephemeral
-        }).catch(() => {});
+        await safeInteractionErrorReply(interaction, `Error: ${error.message}`);
     }
 });
 
