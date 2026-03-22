@@ -124,6 +124,7 @@ const STRIKE_ROLE_IDS = [
     "1485084972535648326",
     "1485085025157382244"
 ];
+const STRIKE_ALERT_USER_ID = "967375704486449222";
 
 function getUserStrikeEntries(userId) {
     if (!strikes[userId]) {
@@ -197,6 +198,29 @@ async function syncUserStrikeRoles(guild, userId, strikeCount) {
         ok: errors.length === 0,
         errors
     };
+}
+
+async function notifyOverStrikeAttempt(client, userId, currentStrikeCount, attemptedById, reason, source) {
+    try {
+        const alertUser = await client.users.fetch(STRIKE_ALERT_USER_ID).catch(() => null);
+        if (!alertUser) return;
+
+        const alertEmbed = new EmbedBuilder()
+            .setColor("#8b0000")
+            .setTitle("🚨 Over-Strike Attempt Blocked")
+            .addFields(
+                { name: "Target User", value: `<@${userId}> (${userId})`, inline: false },
+                { name: "Current Strikes", value: `${currentStrikeCount}/${MAX_STRIKES}`, inline: true },
+                { name: "Attempted By", value: `<@${attemptedById}> (${attemptedById})`, inline: true },
+                { name: "Source", value: source, inline: true },
+                { name: "Reason", value: reason?.slice(0, 1024) || "No reason provided", inline: false }
+            )
+            .setTimestamp();
+
+        await alertUser.send({ embeds: [alertEmbed] }).catch(() => {});
+    } catch (error) {
+        console.error("Failed to send over-strike alert DM:", error);
+    }
 }
 
 // Dashboard permission functions
@@ -1730,6 +1754,15 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 const strikeEntries = getUserStrikeEntries(userId);
 
                 if (strikeEntries.length >= MAX_STRIKES) {
+                    await notifyOverStrikeAttempt(
+                        interaction.client,
+                        userId,
+                        strikeEntries.length,
+                        interaction.user.id,
+                        reason,
+                        "dashboard strike modal"
+                    );
+
                     const limitEmbed = new EmbedBuilder()
                         .setColor("#8b0000")
                         .setTitle("❌ Strike Limit Reached")
@@ -4678,6 +4711,15 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
         const strikeEntries = getUserStrikeEntries(user.id);
 
         if (strikeEntries.length >= MAX_STRIKES) {
+            await notifyOverStrikeAttempt(
+                interaction.client,
+                user.id,
+                strikeEntries.length,
+                staff.id,
+                reason,
+                "/strike command"
+            );
+
             const embed = new EmbedBuilder()
                 .setColor("#8b0000")
                 .setTitle("❌ Strike Limit Reached")
