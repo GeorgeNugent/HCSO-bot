@@ -3153,7 +3153,8 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 const row1 = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId("dashboard_bot_status").setLabel("Set Status").setStyle(ButtonStyle.Primary),
                     new ButtonBuilder().setCustomId("dashboard_bot_custom").setLabel("Custom Status").setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId("dashboard_bot_info").setLabel("Bot Info").setStyle(ButtonStyle.Primary)
+                    new ButtonBuilder().setCustomId("dashboard_bot_info").setLabel("Bot Info").setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId("dashboard_bot_ping").setLabel("Ping").setStyle(ButtonStyle.Success)
                 );
 
                 const row2 = new ActionRowBuilder().addComponents(
@@ -3715,13 +3716,18 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     });
                 }
                 if (subAction === "info") {
+                    const totalSeconds = Math.floor(interaction.client.uptime / 1000);
+                    const uptimeHours = Math.floor(totalSeconds / 3600);
+                    const uptimeMinutes = Math.floor((totalSeconds % 3600) / 60);
+                    const uptimeSeconds = totalSeconds % 60;
+                    const uptimeStr = `${uptimeHours}h ${uptimeMinutes}m ${uptimeSeconds}s`;
                     const embed = new EmbedBuilder()
                         .setColor("#2d5a3d")
                         .setTitle("🤖 Bot Information")
                         .addFields(
                             { name: "Bot Name", value: interaction.client.user.username, inline: true },
                             { name: "Bot ID", value: interaction.client.user.id, inline: true },
-                            { name: "Uptime", value: `${Math.floor(interaction.client.uptime / 1000)}s`, inline: true },
+                            { name: "Uptime", value: uptimeStr, inline: true },
                             { name: "Servers", value: interaction.client.guilds.cache.size.toString(), inline: true }
                         )
                         .setThumbnail(interaction.client.user.displayAvatarURL({ size: 128 }))
@@ -3730,6 +3736,21 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                         embeds: [embed],
                         flags: MessageFlags.Ephemeral
                     });
+                }
+                if (subAction === "ping") {
+                    const ws = interaction.client.ws.ping;
+                    const sent = Date.now();
+                    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+                    const roundtrip = Date.now() - sent;
+                    const embed = new EmbedBuilder()
+                        .setColor("#2d5a3d")
+                        .setTitle("📡 Bot Latency")
+                        .addFields(
+                            { name: "WebSocket", value: `${ws}ms`, inline: true },
+                            { name: "Roundtrip", value: `${roundtrip}ms`, inline: true }
+                        )
+                        .setTimestamp();
+                    return interaction.editReply({ embeds: [embed] });
                 }
             }
 
