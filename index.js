@@ -4785,6 +4785,8 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
 
     // /strike-remove
     if (interaction.commandName === "strike-remove") {
+        await interaction.deferReply();
+
         const user = interaction.options.getUser("user");
         const amount = interaction.options.getInteger("amount");
         const strikeEntries = getUserStrikeEntries(user.id);
@@ -4815,7 +4817,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             });
         }
 
-        interaction.reply({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] });
 
         // Log to strike channel
         const strikeRemoveChannel = client.channels.cache.get(config.logChannels.strike);
