@@ -123,6 +123,7 @@ function save() {
 }
 
 const MAX_STRIKES = 3;
+const LOG_TYPES = ["patrol", "case", "strike", "loa", "transcript", "timeout", "ban", "blacklist"];
 const STRIKE_ROLE_IDS = [
     "1485084924921774242",
     "1485084972535648326",
@@ -158,6 +159,42 @@ function getGuildStrikeStore(guildId) {
     }
 
     return strikes[guildId];
+}
+
+function getGuildLogChannels(guildId) {
+    if (!config.logChannels) {
+        config.logChannels = {};
+    }
+
+    if (!guildId) {
+        return config.logChannels;
+    }
+
+    if (!config.logChannels[guildId] || typeof config.logChannels[guildId] !== "object" || Array.isArray(config.logChannels[guildId])) {
+        config.logChannels[guildId] = {};
+    }
+
+    return config.logChannels[guildId];
+}
+
+function getLogChannelId(guildId, logType) {
+    if (!config.logChannels) {
+        config.logChannels = {};
+    }
+
+    if (guildId) {
+        const guildChannels = getGuildLogChannels(guildId);
+        if (guildChannels[logType]) {
+            return guildChannels[logType];
+        }
+    }
+
+    return config.logChannels[logType] || null;
+}
+
+function setLogChannelId(guildId, logType, channelId) {
+    const guildChannels = getGuildLogChannels(guildId);
+    guildChannels[logType] = channelId;
 }
 
 function getUserStrikeEntries(guildId, userId) {
@@ -4432,8 +4469,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             const channelId = interaction.channel.id;
 
             // Validate log type
-            const validTypes = ["patrol", "case", "strike", "loa", "transcript", "timeout", "ban", "blacklist"];
-            if (!validTypes.includes(logType)) {
+            if (!LOG_TYPES.includes(logType)) {
                 const errorEmbed = new EmbedBuilder()
                     .setColor("#8b0000")
                     .setTitle("❌ Invalid Log Type")
@@ -4443,7 +4479,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             }
 
             // Update config
-            config.logChannels[logType] = channelId;
+            setLogChannelId(interaction.guildId, logType, channelId);
             saveConfig();
 
             const typeNames = {
@@ -4884,7 +4920,10 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
         interaction.reply({ embeds: [embed] });
 
         // Log to strike channel
-        const strikeChannel = client.channels.cache.get(config.logChannels.strike);
+        const strikeChannelId = getLogChannelId(interaction.guildId, "strike");
+        const strikeChannel = strikeChannelId
+            ? (client.channels.cache.get(strikeChannelId) || await client.channels.fetch(strikeChannelId).catch(() => null))
+            : null;
         if (strikeChannel) {
             const logEmbed = new EmbedBuilder()
                 .setColor("#2d5a3d")
@@ -4950,7 +4989,10 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
         await interaction.editReply({ embeds: [embed] });
 
         // Log to strike channel
-        const strikeRemoveChannel = client.channels.cache.get(config.logChannels.strike);
+        const strikeRemoveChannelId = getLogChannelId(interaction.guildId, "strike");
+        const strikeRemoveChannel = strikeRemoveChannelId
+            ? (client.channels.cache.get(strikeRemoveChannelId) || await client.channels.fetch(strikeRemoveChannelId).catch(() => null))
+            : null;
         if (strikeRemoveChannel) {
             const logEmbed = new EmbedBuilder()
                 .setColor("#2d5a3d")
