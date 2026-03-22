@@ -19,6 +19,10 @@ process.on("unhandledRejection", error => {
     console.error("Unhandled promise rejection:", error);
 });
 
+process.on("uncaughtException", error => {
+    console.error("Uncaught exception:", error);
+});
+
 // Load strike data
 const strikes = JSON.parse(fs.readFileSync("./strikes.json", "utf8"));
 
@@ -4455,6 +4459,13 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
     // /set-log-channel
     if (interaction.commandName === "set-log-channel") {
         try {
+            if (!interaction.guildId) {
+                return interaction.reply({
+                    content: "❌ This command can only be used in a server.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
             // Check permission
             if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
                 const errorEmbed = new EmbedBuilder()
@@ -4499,7 +4510,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 .setDescription(`**${typeNames[logType]}** - <#${channelId}> - logs will be sent to this channel from now`)
                 .setTimestamp();
 
-            interaction.reply({ embeds: [successEmbed] });
+            await interaction.reply({ embeds: [successEmbed] });
         } catch (error) {
             console.error("Set log channel error:", error);
             const errorEmbed = new EmbedBuilder()
@@ -4511,7 +4522,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 )
                 .setTimestamp();
 
-            await interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral }).catch(() => {});
+            await safeInteractionErrorReply(interaction, `❌ Logging Configuration Failed\n${error.message || "Unknown error"}`);
         }
     }
 
