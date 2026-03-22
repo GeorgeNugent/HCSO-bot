@@ -126,21 +126,54 @@ const STRIKE_ROLE_IDS = [
 ];
 const STRIKE_ALERT_USER_ID = "967375704486449222";
 
-function getUserStrikeEntries(userId) {
-    if (!strikes[userId]) {
-        strikes[userId] = [];
+function getGuildStrikeStore(guildId) {
+    if (!guildId) return null;
+
+    if (!strikes[guildId] || typeof strikes[guildId] !== "object" || Array.isArray(strikes[guildId])) {
+        strikes[guildId] = {};
+    }
+
+    // Migrate old global strike format (top-level user IDs) into this guild store.
+    let migrated = false;
+    for (const [key, value] of Object.entries(strikes)) {
+        if (key === guildId) continue;
+
+        const isLegacyEntry = Array.isArray(value) || (value && typeof value === "object" && Array.isArray(value.strikes));
+        if (!isLegacyEntry) continue;
+
+        if (!strikes[guildId][key]) {
+            strikes[guildId][key] = Array.isArray(value) ? value : value.strikes;
+        }
+
+        delete strikes[key];
+        migrated = true;
+    }
+
+    if (migrated) {
+        saveStrikes();
+    }
+
+    return strikes[guildId];
+}
+
+function getUserStrikeEntries(guildId, userId) {
+    const guildStrikes = getGuildStrikeStore(guildId);
+    if (!guildStrikes) return [];
+
+    if (!guildStrikes[userId]) {
+        guildStrikes[userId] = [];
     }
 
     // Normalize legacy strike format { strikes: [] } into array format.
-    if (!Array.isArray(strikes[userId]) && Array.isArray(strikes[userId].strikes)) {
-        strikes[userId] = strikes[userId].strikes;
+    if (!Array.isArray(guildStrikes[userId]) && Array.isArray(guildStrikes[userId].strikes)) {
+        guildStrikes[userId] = guildStrikes[userId].strikes;
     }
 
-    if (!Array.isArray(strikes[userId])) {
-        strikes[userId] = [];
+    if (!Array.isArray(guildStrikes[userId])) {
+        guildStrikes[userId] = [];
     }
 
-    return strikes[userId];
+    return guildStrikes[userId];
 }
 
 async function syncUserStrikeRoles(guild, userId, strikeCount) {
@@ -1797,7 +1830,15 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             if (interaction.customId === "strike_modal") {
                 const userId = interaction.fields.getTextInputValue("strike_user_id");
                 const reason = interaction.fields.getTextInputValue("strike_reason");
-                const strikeEntries = getUserStrikeEntries(userId);
+
+                if (!interaction.guildId) {
+                    return interaction.reply({
+                        content: "❌ This action can only be used in a server.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                const strikeEntries = getUserStrikeEntries(interaction.guildId, userId);
 
                 if (strikeEntries.length >= MAX_STRIKES) {
                     await notifyOverStrikeAttempt(
@@ -4754,7 +4795,15 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
     if (interaction.commandName === "strike") {
         const user = interaction.options.getUser("user");
         const reason = interaction.options.getString("reason");
-        const strikeEntries = getUserStrikeEntries(user.id);
+
+        if (!interaction.guildId) {
+            return interaction.reply({
+                content: "❌ This command can only be used in a server.",
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        const strikeEntries = getUserStrikeEntries(interaction.guildId, user.id);
 
         if (strikeEntries.length >= MAX_STRIKES) {
             await notifyOverStrikeAttempt(
@@ -4835,7 +4884,14 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
 
         const user = interaction.options.getUser("user");
         const amount = interaction.options.getInteger("amount");
-        const strikeEntries = getUserStrikeEntries(user.id);
+
+        if (!interaction.guildId) {
+            return interaction.editReply({
+                content: "❌ This command can only be used in a server."
+            });
+        }
+
+        const strikeEntries = getUserStrikeEntries(interaction.guildId, user.id);
 
         const removed = Math.min(amount, strikeEntries.length);
         strikeEntries.splice(0, removed);
@@ -4891,7 +4947,15 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
     // /strike-logs
     if (interaction.commandName === "strike-logs") {
         const user = interaction.options.getUser("user");
-        const logs = getUserStrikeEntries(user.id);
+
+        if (!interaction.guildId) {
+            return interaction.reply({
+                content: "❌ This command can only be used in a server.",
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        const logs = getUserStrikeEntries(interaction.guildId, user.id);
 
         if (!logs || logs.length === 0) {
             const embed = new EmbedBuilder()
