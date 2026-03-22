@@ -1,8 +1,21 @@
 import { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ActivityType, ChannelType } from "discord.js";
 import fs from "fs";
+import http from "node:http";
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
+const PORT = process.env.PORT;
+
+if (PORT) {
+    const healthServer = http.createServer((req, res) => {
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end("Bot is running");
+    });
+
+    healthServer.listen(PORT, () => {
+        console.log(`Health server listening on port ${PORT}`);
+    });
+}
 
 // Load strike data
 const strikes = JSON.parse(fs.readFileSync("./strikes.json", "utf8"));
