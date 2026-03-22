@@ -99,6 +99,9 @@ if (tickets.tickets) {
 // Load notes data
 let notesData = readJsonData("notes.json", { notes: {} });
 
+// Load commendations data
+let commendationsData = readJsonData("commendations.json", {});
+
 // Load config data
 let config = readJsonData("config.json", {});
 
@@ -158,6 +161,10 @@ function saveNotes() {
     writeJsonData("notes.json", notesData);
 }
 
+function saveCommendations() {
+    writeJsonData("commendations.json", commendationsData);
+}
+
 function saveConfig() {
     writeJsonData("config.json", config);
 }
@@ -173,7 +180,7 @@ function save() {
 }
 
 const MAX_STRIKES = 3;
-const LOG_TYPES = ["patrol", "case", "moderation", "strike", "loa", "transcript", "timeout", "ban", "blacklist", "discord"];
+const LOG_TYPES = ["patrol", "case", "moderation", "strike", "loa", "transcript", "timeout", "ban", "blacklist", "discord", "commendations"];
 const STRIKE_ROLE_IDS = [
     "1485084924921774242",
     "1485084972535648326",
@@ -413,6 +420,13 @@ async function resolveRoleUpdateActor(guild, targetUserId, changedRoleIds, audit
     return null;
 }
 
+function getUserCommendations(userId) {
+    if (!commendationsData[userId]) {
+        commendationsData[userId] = [];
+    }
+    return commendationsData[userId];
+}
+
 function getUserStrikeEntries(guildId, userId) {
     const guildStrikes = getGuildStrikeStore(guildId);
     if (!guildStrikes) return [];
@@ -596,6 +610,19 @@ async function sendStrikeLog(client, guildId, embed) {
     }
 }
 
+async function sendCommendationLog(client, guildId, embed) {
+    try {
+        const channelId = getLogChannelId(guildId, "commendations");
+        if (!channelId) return { ok: false, error: "No commendations log channel configured.", channelId: null };
+        const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(() => null);
+        if (!channel || !channel.isTextBased()) return { ok: false, error: `Channel not found: ${channelId}`, channelId };
+        await channel.send({ embeds: [embed] });
+        return { ok: true, error: null, channelId };
+    } catch (error) {
+        return { ok: false, error: error.message || "Unknown error", channelId: getLogChannelId(guildId, "commendations") };
+    }
+}
+
 async function safeInteractionErrorReply(interaction, message) {
     const payload = {
         content: message,
@@ -660,6 +687,44 @@ function canAccessModule(member, moduleType) {
         supervisor: () => isAdmin || hasRole("supervisor")
     };
     return (modulePerms[moduleType] || (() => false))();
+}
+
+// Build dashboard button rows showing only modules the user can access
+function buildDashboardComponents(member) {
+    const botOwnerId = "967375704486449222";
+
+    const allModules = [
+        { id: "patrol",     label: "Patrol",          emoji: "🚔", style: ButtonStyle.Primary },
+        { id: "cases",      label: "Cases",           emoji: "📋", style: ButtonStyle.Primary },
+        { id: "ia",         label: "IA",              emoji: "⚖️", style: ButtonStyle.Primary },
+        { id: "tickets",    label: "Tickets",         emoji: "🎫", style: ButtonStyle.Primary },
+        { id: "moderation", label: "Moderation",      emoji: "🔨", style: ButtonStyle.Primary },
+        { id: "training",   label: "Training",        emoji: "📚", style: ButtonStyle.Primary },
+        { id: "logs",       label: "Logs",            emoji: "📜", style: ButtonStyle.Primary },
+        { id: "bot",        label: "Bot Settings",    emoji: "⚙️", style: ButtonStyle.Primary },
+        { id: "analytics",  label: "Analytics",       emoji: "📊", style: ButtonStyle.Primary },
+        { id: "supervisor", label: "Supervisor Tools", emoji: "👮", style: ButtonStyle.Danger  },
+    ];
+
+    const accessible = allModules.filter(m => canAccessModule(member, m.id));
+
+    if (member.id === botOwnerId) {
+        accessible.push({ id: "owner", label: "Bot Owner", emoji: "🔧", style: ButtonStyle.Success });
+    }
+
+    const rows = [];
+    for (let i = 0; i < accessible.length; i += 3) {
+        const components = accessible.slice(i, i + 3).map(m =>
+            new ButtonBuilder()
+                .setCustomId(`dashboard_${m.id}`)
+                .setLabel(m.label)
+                .setStyle(m.style)
+                .setEmoji(m.emoji)
+        );
+        rows.push(new ActionRowBuilder().addComponents(...components));
+    }
+
+    return rows.slice(0, 5);
 }
 
 // Transcript generation function
@@ -1167,6 +1232,27 @@ const commands = [
         .addStringOption(o => o.setName("reason").setDescription("Reason for reopening").setRequired(true)),
 
     new SlashCommandBuilder()
+        .setName("commendation")
+        .setDescription("Manage officer commendations")
+        .addSubcommand(sub =>
+            sub.setName("give")
+                .setDescription("Award a commendation to an officer")
+                .addUserOption(o => o.setName("user").setDescription("Officer to commend").setRequired(true))
+                .addStringOption(o => o.setName("reason").setDescription("Reason for the commendation").setRequired(true))
+        )
+        .addSubcommand(sub =>
+            sub.setName("list")
+                .setDescription("View all commendations for an officer")
+                .addUserOption(o => o.setName("user").setDescription("Officer to view").setRequired(true))
+        )
+        .addSubcommand(sub =>
+            sub.setName("remove")
+                .setDescription("Remove a specific commendation from an officer")
+                .addUserOption(o => o.setName("user").setDescription("Officer").setRequired(true))
+                .addIntegerOption(o => o.setName("number").setDescription("Commendation number to remove").setRequired(true).setMinValue(1))
+        ),
+
+    new SlashCommandBuilder()
         .setName("set-log-channel")
         .setDescription("Set the log channel for a specific log type")
         .addStringOption(o => o.setName("log-type").setDescription("Log type").setRequired(true).addChoices(
@@ -1176,7 +1262,8 @@ const commands = [
             { name: "LOA Logs", value: "loa" },
             { name: "Transcript Logs", value: "transcript" },
             { name: "Timeout Logs", value: "timeout" },
-            { name: "Discord Logs", value: "discord" }
+            { name: "Discord Logs", value: "discord" },
+            { name: "Commendation Logs", value: "commendations" }
         )),
 
     new SlashCommandBuilder()
@@ -3044,6 +3131,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
 
                 const row3 = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId("dashboard_logs_ia").setLabel("Set IA Log").setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId("dashboard_logs_commendations").setLabel("Set Commendation Log").setStyle(ButtonStyle.Primary),
                     new ButtonBuilder().setCustomId("dashboard_back").setLabel("← Back").setStyle(ButtonStyle.Secondary)
                 );
 
@@ -3597,7 +3685,8 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     transcript: "Transcript Logs",
                     discord: "Discord Logs",
                     ticket: "Ticket Logs",
-                    ia: "IA Logs"
+                    ia: "IA Logs",
+                    commendations: "Commendation Logs"
                 };
                 
                 const currentChannel = getLogChannelId(interaction.guildId, logType);
@@ -3937,7 +4026,6 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
 
             // BACK BUTTON - Return to main dashboard
             if (moduleType === "back") {
-                // Recreate main dashboard
                 const dashboardEmbed = new EmbedBuilder()
                     .setColor("#2d5a3d")
                     .setTitle("🏢 HCSO Department Dashboard")
@@ -3945,75 +4033,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     .setThumbnail(interaction.client.user.displayAvatarURL({ size: 128 }))
                     .setTimestamp();
 
-                const row1 = new ActionRowBuilder()
-                    .addComponents(
-                        new ButtonBuilder()
-                            .setCustomId("dashboard_patrol")
-                            .setLabel("Patrol")
-                            .setStyle(ButtonStyle.Primary)
-                            .setEmoji("🚔"),
-                        new ButtonBuilder()
-                            .setCustomId("dashboard_cases")
-                            .setLabel("Cases")
-                            .setStyle(ButtonStyle.Primary)
-                            .setEmoji("📋"),
-                        new ButtonBuilder()
-                            .setCustomId("dashboard_ia")
-                            .setLabel("IA")
-                            .setStyle(ButtonStyle.Primary)
-                            .setEmoji("⚖️")
-                    );
-
-                const row2 = new ActionRowBuilder()
-                    .addComponents(
-                        new ButtonBuilder()
-                            .setCustomId("dashboard_tickets")
-                            .setLabel("Tickets")
-                            .setStyle(ButtonStyle.Primary)
-                            .setEmoji("🎫"),
-                        new ButtonBuilder()
-                            .setCustomId("dashboard_moderation")
-                            .setLabel("Moderation")
-                            .setStyle(ButtonStyle.Primary)
-                            .setEmoji("🔨"),
-                        new ButtonBuilder()
-                            .setCustomId("dashboard_training")
-                            .setLabel("Training")
-                            .setStyle(ButtonStyle.Primary)
-                            .setEmoji("📚")
-                    );
-
-                const row3 = new ActionRowBuilder()
-                    .addComponents(
-                        new ButtonBuilder()
-                            .setCustomId("dashboard_logs")
-                            .setLabel("Logs")
-                            .setStyle(ButtonStyle.Primary)
-                            .setEmoji("📜"),
-                        new ButtonBuilder()
-                            .setCustomId("dashboard_bot")
-                            .setLabel("Bot Settings")
-                            .setStyle(ButtonStyle.Primary)
-                            .setEmoji("⚙️"),
-                        new ButtonBuilder()
-                            .setCustomId("dashboard_analytics")
-                            .setLabel("Analytics")
-                            .setStyle(ButtonStyle.Primary)
-                            .setEmoji("📊")
-                    );
-
-                const row4 = new ActionRowBuilder()
-                    .addComponents(
-                        new ButtonBuilder()
-                            .setCustomId("dashboard_supervisor")
-                            .setLabel("Supervisor Tools")
-                            .setStyle(ButtonStyle.Danger)
-                            .setEmoji("👮")
-                    );
-
                 return interaction.reply({
                     embeds: [dashboardEmbed],
-                    components: [row1, row2, row3, row4],
+                    components: buildDashboardComponents(interaction.member),
                     flags: MessageFlags.Ephemeral
                 });
             }
@@ -4999,7 +5021,8 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 timeout: "Timeout Logs",
                 ban: "Ban Logs",
                 blacklist: "Blacklist Logs",
-                discord: "Discord Logs"
+                discord: "Discord Logs",
+                commendations: "Commendation Logs"
             };
 
             const successEmbed = new EmbedBuilder()
@@ -5755,6 +5778,132 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
         return interaction.reply({ embeds: embeds });
     }
 
+    // /commendation
+    if (interaction.commandName === "commendation") {
+        const sub = interaction.options.getSubcommand();
+
+        if (sub === "give") {
+            const user = interaction.options.getUser("user");
+            const reason = interaction.options.getString("reason");
+
+            const entries = getUserCommendations(user.id);
+            const commendationNumber = entries.length + 1;
+
+            entries.push({
+                id: commendationNumber,
+                reason,
+                givenBy: interaction.user.id,
+                date: new Date().toISOString().slice(0, 10)
+            });
+            saveCommendations();
+
+            const embed = new EmbedBuilder()
+                .setColor("#2d5a3d")
+                .setTitle("🏅 Commendation Issued")
+                .setDescription(`Commendation added for <@${user.id}>.`)
+                .addFields(
+                    { name: `Commendation #${commendationNumber}`, value: `**Reason:** ${reason}`, inline: false },
+                    { name: "Given By", value: `<@${interaction.user.id}>`, inline: true },
+                    { name: "Date", value: new Date().toISOString().slice(0, 10), inline: true }
+                )
+                .setTimestamp();
+
+            interaction.reply({ embeds: [embed] });
+
+            const logEmbed = new EmbedBuilder()
+                .setColor("#2d5a3d")
+                .setTitle("=== NEW COMMENDATION ===")
+                .addFields(
+                    { name: "Officer", value: `<@${user.id}>`, inline: false },
+                    { name: "Given By", value: `<@${interaction.user.id}>`, inline: true },
+                    { name: "Commendation #", value: `${commendationNumber}`, inline: true },
+                    { name: "Reason", value: reason, inline: false },
+                    { name: "Date", value: new Date().toISOString().slice(0, 10), inline: true }
+                )
+                .setTimestamp();
+
+            await sendCommendationLog(interaction.client, interaction.guildId, logEmbed);
+        }
+
+        if (sub === "list") {
+            const user = interaction.options.getUser("user");
+            const entries = getUserCommendations(user.id);
+
+            if (entries.length === 0) {
+                return interaction.reply({
+                    content: `This officer has no commendations.`,
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const embeds = [];
+            let currentEmbed = new EmbedBuilder()
+                .setColor("#2d5a3d")
+                .setTitle(`=== COMMENDATIONS FOR ${user.username.toUpperCase()} ===`)
+                .setDescription(`Total Commendations: **${entries.length}**`);
+
+            entries.forEach((entry, i) => {
+                const fieldValue = `**Given By:** <@${entry.givenBy}>\n**Date:** ${entry.date}\n**Reason:** ${entry.reason}`;
+                currentEmbed.addFields({ name: `#${entry.id}`, value: fieldValue, inline: false });
+
+                if ((i + 1) % 10 === 0 || i === entries.length - 1) {
+                    currentEmbed.setTimestamp();
+                    embeds.push(currentEmbed);
+                    if (i !== entries.length - 1) {
+                        currentEmbed = new EmbedBuilder()
+                            .setColor("#2d5a3d")
+                            .setTitle("=== COMMENDATIONS (Continued) ===");
+                    }
+                }
+            });
+
+            return interaction.reply({ embeds });
+        }
+
+        if (sub === "remove") {
+            const user = interaction.options.getUser("user");
+            const number = interaction.options.getInteger("number");
+
+            const entries = getUserCommendations(user.id);
+            const idx = entries.findIndex(e => e.id === number);
+
+            if (idx === -1) {
+                return interaction.reply({
+                    content: `❌ Commendation #${number} not found for <@${user.id}>.`,
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            entries.splice(idx, 1);
+            saveCommendations();
+
+            const embed = new EmbedBuilder()
+                .setColor("#8b0000")
+                .setTitle("🗑️ Commendation Removed")
+                .setDescription(`Commendation #${number} has been removed from <@${user.id}>.`)
+                .addFields(
+                    { name: "Removed By", value: `<@${interaction.user.id}>`, inline: true },
+                    { name: "Date", value: new Date().toISOString().slice(0, 10), inline: true }
+                )
+                .setTimestamp();
+
+            interaction.reply({ embeds: [embed] });
+
+            const logEmbed = new EmbedBuilder()
+                .setColor("#8b0000")
+                .setTitle("=== COMMENDATION REMOVED ===")
+                .addFields(
+                    { name: "Officer", value: `<@${user.id}>`, inline: false },
+                    { name: "Removed By", value: `<@${interaction.user.id}>`, inline: true },
+                    { name: "Commendation #", value: `${number}`, inline: true },
+                    { name: "Date", value: new Date().toISOString().slice(0, 10), inline: true }
+                )
+                .setTimestamp();
+
+            await sendCommendationLog(interaction.client, interaction.guildId, logEmbed);
+        }
+    }
+
     // /purge
     if (interaction.commandName === "purge") {
         // Check if user has permission
@@ -5818,81 +5967,18 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 .setThumbnail(interaction.client.user.displayAvatarURL({ size: 128 }))
                 .setTimestamp();
 
-            // Create button rows
-            const row1 = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder()
-                        .setCustomId("dashboard_patrol")
-                        .setLabel("Patrol")
-                        .setStyle(ButtonStyle.Primary)
-                        .setEmoji("🚔"),
-                    new ButtonBuilder()
-                        .setCustomId("dashboard_cases")
-                        .setLabel("Cases")
-                        .setStyle(ButtonStyle.Primary)
-                        .setEmoji("📋"),
-                    new ButtonBuilder()
-                        .setCustomId("dashboard_ia")
-                        .setLabel("IA")
-                        .setStyle(ButtonStyle.Primary)
-                        .setEmoji("⚖️")
-                );
-
-            const row2 = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder()
-                        .setCustomId("dashboard_tickets")
-                        .setLabel("Tickets")
-                        .setStyle(ButtonStyle.Primary)
-                        .setEmoji("🎫"),
-                    new ButtonBuilder()
-                        .setCustomId("dashboard_moderation")
-                        .setLabel("Moderation")
-                        .setStyle(ButtonStyle.Primary)
-                        .setEmoji("🔨"),
-                    new ButtonBuilder()
-                        .setCustomId("dashboard_training")
-                        .setLabel("Training")
-                        .setStyle(ButtonStyle.Primary)
-                        .setEmoji("📚")
-                );
-
-            const row3 = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder()
-                        .setCustomId("dashboard_logs")
-                        .setLabel("Logs")
-                        .setStyle(ButtonStyle.Primary)
-                        .setEmoji("📜"),
-                    new ButtonBuilder()
-                        .setCustomId("dashboard_bot")
-                        .setLabel("Bot Settings")
-                        .setStyle(ButtonStyle.Primary)
-                        .setEmoji("⚙️"),
-                    new ButtonBuilder()
-                        .setCustomId("dashboard_analytics")
-                        .setLabel("Analytics")
-                        .setStyle(ButtonStyle.Primary)
-                        .setEmoji("📊")
-                );
-
-            const row4 = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder()
-                        .setCustomId("dashboard_supervisor")
-                        .setLabel("Supervisor Tools")
-                        .setStyle(ButtonStyle.Danger)
-                        .setEmoji("👮"),
-                    new ButtonBuilder()
-                        .setCustomId("dashboard_owner")
-                        .setLabel("Bot Owner")
-                        .setStyle(ButtonStyle.Success)
-                        .setEmoji("🔧")
-                );
+            // Build button rows showing only modules this user can access
+            const dashboardRows = buildDashboardComponents(interaction.member);
+            if (dashboardRows.length === 0) {
+                return interaction.reply({
+                    content: "❌ You don't have access to any dashboard modules.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
 
             return interaction.reply({
                 embeds: [dashboardEmbed],
-                components: [row1, row2, row3, row4],
+                components: dashboardRows,
                 flags: MessageFlags.Ephemeral
             });
         } catch (error) {
