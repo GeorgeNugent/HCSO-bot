@@ -100,6 +100,9 @@ if (tickets.tickets) {
 // Load notes data
 let notesData = readJsonData("notes.json", { notes: {} });
 
+// Load blacklist data
+const blacklists = readJsonData("blacklists.json", {});
+
 // Load commendations data
 let commendationsData = readJsonData("commendations.json", {});
 
@@ -137,6 +140,127 @@ if (!config.moduleRoleAccess.botOwner) {
 if (!config.ticketCategory) {
     config.ticketCategory = null;
 }
+if (!config.blacklistJoinAction) {
+    config.blacklistJoinAction = "ban";
+}
+
+const DEFAULT_TICKET_TYPES = [
+    { key: "ia_report", label: "IA Report", style: "primary", enabled: true },
+    { key: "general_support", label: "General Support", style: "primary", enabled: true },
+    { key: "ia_inquiry", label: "IA Inquiry", style: "primary", enabled: true },
+    { key: "appeal_ban", label: "Appeal Ban", style: "primary", enabled: true }
+];
+
+function sanitizeTicketTypeKey(value) {
+    return String(value || "")
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s_-]/g, "")
+        .replace(/[\s-]+/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_+|_+$/g, "");
+}
+
+function normalizeTicketTypeStyle(value) {
+    const normalized = String(value || "primary").toLowerCase().trim();
+    if (["primary", "secondary", "success", "danger"].includes(normalized)) {
+        return normalized;
+    }
+
+    return "primary";
+}
+
+function normalizeTicketType(rawType) {
+    if (!rawType || typeof rawType !== "object") {
+        return null;
+    }
+
+    const key = sanitizeTicketTypeKey(rawType.key);
+    const label = String(rawType.label || "").trim().slice(0, 80);
+    if (!key || !label) {
+        return null;
+    }
+
+    return {
+        key,
+        label,
+        style: normalizeTicketTypeStyle(rawType.style),
+        enabled: rawType.enabled !== false
+    };
+}
+
+function ensureTicketTypesConfig() {
+    if (!Array.isArray(config.ticketTypes) || config.ticketTypes.length === 0) {
+        config.ticketTypes = DEFAULT_TICKET_TYPES.map(type => ({ ...type }));
+        return;
+    }
+
+    const normalized = config.ticketTypes
+        .map(normalizeTicketType)
+        .filter(Boolean);
+
+    if (normalized.length === 0) {
+        config.ticketTypes = DEFAULT_TICKET_TYPES.map(type => ({ ...type }));
+        return;
+    }
+
+    const uniqueByKey = [];
+    const seen = new Set();
+    for (const type of normalized) {
+        if (seen.has(type.key)) continue;
+        seen.add(type.key);
+        uniqueByKey.push(type);
+    }
+
+    config.ticketTypes = uniqueByKey;
+}
+
+function getTicketTypes(includeDisabled = false) {
+    ensureTicketTypesConfig();
+    const source = includeDisabled ? config.ticketTypes : config.ticketTypes.filter(type => type.enabled !== false);
+    return source.map(type => ({ ...type }));
+}
+
+function resolveTicketButtonStyle(style) {
+    const normalized = normalizeTicketTypeStyle(style);
+    const styleMap = {
+        primary: ButtonStyle.Primary,
+        secondary: ButtonStyle.Secondary,
+        success: ButtonStyle.Success,
+        danger: ButtonStyle.Danger
+    };
+
+    return styleMap[normalized] || ButtonStyle.Primary;
+}
+
+function buildTicketPanelRows() {
+    const ticketTypes = getTicketTypes(false);
+    if (ticketTypes.length === 0) {
+        return [];
+    }
+
+    const rows = [];
+    const maxButtons = 25;
+    const limitedTypes = ticketTypes.slice(0, maxButtons);
+
+    for (let index = 0; index < limitedTypes.length; index += 5) {
+        const chunk = limitedTypes.slice(index, index + 5);
+        const row = new ActionRowBuilder().addComponents(
+            ...chunk.map(type =>
+                new ButtonBuilder()
+                    .setCustomId(`ticket_${type.key}`)
+                    .setLabel(type.label)
+                    .setStyle(resolveTicketButtonStyle(type.style))
+            )
+        );
+
+        rows.push(row);
+    }
+
+    return rows;
+}
+
+ensureTicketTypesConfig();
 
 function saveStrikes() {
     writeJsonData("strikes.json", strikes);
@@ -166,6 +290,10 @@ function saveNotes() {
     writeJsonData("notes.json", notesData);
 }
 
+function saveBlacklists() {
+    writeJsonData("blacklists.json", blacklists);
+}
+
 function saveCommendations() {
     writeJsonData("commendations.json", commendationsData);
 }
@@ -181,6 +309,7 @@ function save() {
     saveCases();
     saveReports();
     saveTickets();
+    saveBlacklists();
     saveConfig();
 }
 
@@ -232,6 +361,16 @@ function getGuildStrikeStore(guildId) {
     }
 
     return strikes[guildId];
+}
+
+function getGuildBlacklistStore(guildId) {
+    if (!guildId) return null;
+
+    if (!blacklists[guildId] || typeof blacklists[guildId] !== "object" || Array.isArray(blacklists[guildId])) {
+        blacklists[guildId] = {};
+    }
+
+    return blacklists[guildId];
 }
 
 function getGuildLogChannels(guildId) {
@@ -352,6 +491,272 @@ function getMemberDisplayName(memberOrUser) {
     }
 
     return memberOrUser.username || "Unknown User";
+}
+
+const moderationPromptSessions = new Map();
+const NUMBER_WORD_VALUES = {
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+    thirteen: 13,
+    fourteen: 14,
+    fifteen: 15,
+    sixteen: 16,
+    seventeen: 17,
+    eighteen: 18,
+    nineteen: 19,
+    twenty: 20,
+    thirty: 30,
+    forty: 40,
+    fifty: 50,
+    sixty: 60,
+    seventy: 70,
+    eighty: 80,
+    ninety: 90
+};
+
+function createModerationSessionKey(guildId, channelId, userId) {
+    return `${guildId}:${channelId}:${userId}`;
+}
+
+function clearModerationPromptSession(sessionKey) {
+    const existingSession = moderationPromptSessions.get(sessionKey);
+    if (existingSession?.timeoutId) {
+        clearTimeout(existingSession.timeoutId);
+    }
+
+    moderationPromptSessions.delete(sessionKey);
+}
+
+function startModerationPromptSession(sessionKey, sessionData) {
+    clearModerationPromptSession(sessionKey);
+
+    const timeoutId = setTimeout(() => {
+        moderationPromptSessions.delete(sessionKey);
+    }, 2 * 60 * 1000);
+
+    moderationPromptSessions.set(sessionKey, {
+        ...sessionData,
+        timeoutId
+    });
+}
+
+function formatDiscordTimestamp(timestamp = Date.now()) {
+    return `<t:${Math.floor(timestamp / 1000)}:F>`;
+}
+
+function parseSelectionNumber(input) {
+    const normalized = String(input || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, " ")
+        .replace(/-/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/^number\s+/, "");
+
+    if (!normalized) {
+        return null;
+    }
+
+    if (/^\d+$/.test(normalized)) {
+        return Number(normalized);
+    }
+
+    const parts = normalized.split(" ");
+    let value = 0;
+
+    for (const part of parts) {
+        const wordValue = NUMBER_WORD_VALUES[part];
+        if (!wordValue) {
+            return null;
+        }
+
+        value += wordValue;
+    }
+
+    return value || null;
+}
+
+function buildModerationTargetList(guildMembers, action, moderatorId) {
+    return Array.from(guildMembers.values())
+        .filter(member => {
+            if (member.user.bot || member.id === moderatorId) {
+                return false;
+            }
+
+            if (action === "ban") {
+                return member.bannable;
+            }
+
+            return true;
+        })
+        .map(member => ({
+            id: member.id,
+            displayName: getMemberDisplayName(member),
+            username: member.user.username
+        }))
+        .sort((left, right) => left.displayName.localeCompare(right.displayName, undefined, { sensitivity: "base" }));
+}
+
+function buildModerationSelectionEmbeds(action, members) {
+    const isBan = action === "ban";
+    const embedColor = isBan ? "#8B0000" : "#2C2F33";
+    const embedTitle = isBan ? "🚫 Ban Member" : "📝 Blacklist Member";
+    const perEmbed = Math.max(1, Math.ceil(members.length / 10));
+    const embeds = [];
+
+    for (let index = 0; index < members.length; index += perEmbed) {
+        const chunk = members.slice(index, index + perEmbed);
+        const startNumber = index + 1;
+        const endNumber = index + chunk.length;
+        const description = chunk
+            .map((member, chunkIndex) => `**${startNumber + chunkIndex}.** ${truncateForField(member.displayName, 32)} (<@${member.id}>)`)
+            .join("\n");
+
+        embeds.push(
+            new EmbedBuilder()
+                .setColor(embedColor)
+                .setTitle(embedTitle)
+                .setDescription(description)
+                .addFields({
+                    name: "How to respond",
+                    value: "Type the member number in this channel, like `1` or `one`. Your message will be deleted."
+                })
+                .setFooter({ text: `Members ${startNumber}-${endNumber} of ${members.length}` })
+                .setTimestamp()
+        );
+    }
+
+    return embeds;
+}
+
+function buildBanAuditEmbed(targetId, moderator, reason, timestamp) {
+    return new EmbedBuilder()
+        .setColor("#8B0000")
+        .setTitle("🚫 Member Banned")
+        .setDescription(`<@${targetId}> has been banned from the server.`)
+        .addFields(
+            { name: "Banned By", value: `<@${moderator.id}>`, inline: true },
+            { name: "Reason", value: truncateForField(reason), inline: false },
+            { name: "Time", value: formatDiscordTimestamp(timestamp), inline: true }
+        )
+        .setTimestamp(timestamp);
+}
+
+function buildBlacklistAuditEmbed(targetId, moderator, reason, timestamp) {
+    return new EmbedBuilder()
+        .setColor("#2C2F33")
+        .setTitle("📝 Member Blacklisted")
+        .setDescription(`<@${targetId}> has been added to the blacklist.`)
+        .addFields(
+            { name: "Blacklisted By", value: `<@${moderator.id}>`, inline: true },
+            { name: "Reason", value: truncateForField(reason), inline: false },
+            { name: "Time", value: formatDiscordTimestamp(timestamp), inline: true }
+        )
+        .setTimestamp(timestamp);
+}
+
+function buildBlacklistAutoActionEmbed(targetId, actionTaken, blacklistEntry, timestamp) {
+    const actionLabel = actionTaken === "kick" ? "Kicked" : "Banned";
+    return new EmbedBuilder()
+        .setColor("#2C2F33")
+        .setTitle(`⚠️ Blacklisted Member ${actionLabel}`)
+        .setDescription(`<@${targetId}> joined while blacklisted and was automatically ${actionLabel.toLowerCase()}.`)
+        .addFields(
+            { name: "Auto Action", value: actionLabel, inline: true },
+            { name: "Original Reason", value: truncateForField(blacklistEntry?.reason || "No reason provided"), inline: false },
+            {
+                name: "Listed By",
+                value: blacklistEntry?.moderatorId ? `<@${blacklistEntry.moderatorId}>` : (blacklistEntry?.moderatorTag || "Unknown"),
+                inline: true
+            },
+            {
+                name: "Listed At",
+                value: blacklistEntry?.timestamp
+                    ? formatDiscordTimestamp(new Date(blacklistEntry.timestamp).getTime())
+                    : "Unknown",
+                inline: true
+            },
+            { name: "Time", value: formatDiscordTimestamp(timestamp), inline: true }
+        )
+        .setTimestamp(timestamp);
+}
+
+function buildBlacklistManageEmbeds(entries) {
+    const perEmbed = Math.max(1, Math.ceil(entries.length / 10));
+    const embeds = [];
+
+    for (let index = 0; index < entries.length; index += perEmbed) {
+        const chunk = entries.slice(index, index + perEmbed);
+        const startNumber = index + 1;
+        const endNumber = index + chunk.length;
+
+        const description = chunk
+            .map((entry, chunkIndex) => {
+                const entryNumber = startNumber + chunkIndex;
+                const listedAt = entry.timestamp
+                    ? formatDiscordTimestamp(new Date(entry.timestamp).getTime())
+                    : "Unknown";
+                return [
+                    `**${entryNumber}.** <@${entry.userId}> (${entry.userId})`,
+                    `Reason: ${truncateForField(entry.reason || "No reason provided", 120)}`,
+                    `Listed: ${listedAt}`
+                ].join("\n");
+            })
+            .join("\n\n");
+
+        embeds.push(
+            new EmbedBuilder()
+                .setColor("#2C2F33")
+                .setTitle("📋 Blacklist Entries")
+                .setDescription(description)
+                .addFields({
+                    name: "How to remove",
+                    value: "Type the entry number to remove it. Type `cancel` to stop. Your message will be deleted."
+                })
+                .setFooter({ text: `Entries ${startNumber}-${endNumber} of ${entries.length}` })
+                .setTimestamp()
+        );
+    }
+
+    return embeds;
+}
+
+async function sendTemporaryChannelNotice(channel, content, ttlMs = 15000) {
+    const notice = await channel.send({ content }).catch(() => null);
+
+    if (notice) {
+        setTimeout(() => {
+            notice.delete().catch(() => {});
+        }, ttlMs);
+    }
+
+    return notice;
+}
+
+async function sendModerationLogEmbed(guildId, logType, sourceChannelId, embed) {
+    const logChannelId = getLogChannelId(guildId, logType);
+    if (!logChannelId || logChannelId === sourceChannelId) {
+        return;
+    }
+
+    const logChannel = client.channels.cache.get(logChannelId)
+        || await client.channels.fetch(logChannelId).catch(() => null);
+
+    if (!logChannel?.isTextBased()) {
+        return;
+    }
+
+    await logChannel.send({ embeds: [embed] }).catch(() => {});
 }
 
 async function renderWelcomeImage(memberName) {
@@ -1379,6 +1784,35 @@ const commands = [
         .setDescription("Deploy the HCSO Ticket Panel (admins only)"),
 
     new SlashCommandBuilder()
+        .setName("ticket-type")
+        .setDescription("Manage ticket panel button types")
+        .addSubcommand(sub =>
+            sub.setName("add")
+                .setDescription("Add or update a ticket type button")
+                .addStringOption(o => o.setName("key").setDescription("Unique key, e.g. report_issue").setRequired(true))
+                .addStringOption(o => o.setName("label").setDescription("Button label, e.g. Report Issue").setRequired(true))
+                .addStringOption(o => o.setName("style").setDescription("Button style").setRequired(false).addChoices(
+                    { name: "Primary", value: "primary" },
+                    { name: "Secondary", value: "secondary" },
+                    { name: "Success", value: "success" },
+                    { name: "Danger", value: "danger" }
+                ))
+        )
+        .addSubcommand(sub =>
+            sub.setName("remove")
+                .setDescription("Remove a ticket type button")
+                .addStringOption(o => o.setName("key").setDescription("Ticket type key to remove").setRequired(true))
+        )
+        .addSubcommand(sub =>
+            sub.setName("list")
+                .setDescription("List configured ticket type buttons")
+        )
+        .addSubcommand(sub =>
+            sub.setName("reset")
+                .setDescription("Reset ticket type buttons back to defaults")
+        ),
+
+    new SlashCommandBuilder()
         .setName("ticket-add-user")
         .setDescription("Add a user to the current ticket")
         .addUserOption(o => o.setName("user").setDescription("User to add").setRequired(true)),
@@ -1447,6 +1881,50 @@ async function sendDiscordEventLog(guildId, embed) {
 }
 
 client.on("guildMemberAdd", async member => {
+    const guildBlacklistStore = getGuildBlacklistStore(member.guild.id);
+    const blacklistEntry = guildBlacklistStore?.[member.id];
+    if (blacklistEntry) {
+        const now = Date.now();
+        const configuredAction = config.blacklistJoinAction === "kick" ? "kick" : "ban";
+        let actionTaken = configuredAction;
+
+        try {
+            if (configuredAction === "kick") {
+                if (!member.kickable) {
+                    await member.ban({
+                        reason: `Auto-ban on join (blacklist): ${blacklistEntry.reason || "No reason provided"}`
+                    });
+                    actionTaken = "ban";
+                } else {
+                    await member.kick(`Auto-kick on join (blacklist): ${blacklistEntry.reason || "No reason provided"}`);
+                }
+            } else {
+                await member.ban({
+                    reason: `Auto-ban on join (blacklist): ${blacklistEntry.reason || "No reason provided"}`
+                });
+            }
+
+            const autoActionEmbed = buildBlacklistAutoActionEmbed(member.id, actionTaken, blacklistEntry, now);
+            await sendModerationLogEmbed(member.guild.id, "blacklist", null, autoActionEmbed);
+            return;
+        } catch (error) {
+            console.error(`Failed blacklist auto-action for ${member.id}:`, error);
+
+            const failureEmbed = new EmbedBuilder()
+                .setColor("#8b0000")
+                .setTitle("❌ Blacklist Auto-Action Failed")
+                .setDescription(`Could not apply blacklist join action to <@${member.id}>.`)
+                .addFields(
+                    { name: "Configured Action", value: configuredAction, inline: true },
+                    { name: "Reason", value: truncateForField(blacklistEntry.reason || "No reason provided"), inline: false },
+                    { name: "Error", value: truncateForField(error.message || "Unknown error"), inline: false }
+                )
+                .setTimestamp(now);
+
+            await sendModerationLogEmbed(member.guild.id, "blacklist", null, failureEmbed);
+        }
+    }
+
     const memberName = getMemberDisplayName(member);
     const memberCountLabel = formatOrdinal(member.guild.memberCount);
     const welcomeImage = await renderWelcomeImage(memberName).catch(error => {
@@ -1655,9 +2133,27 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             }
 
             // Ticket button handlers
-            if (interaction.customId.startsWith("ticket_") && !interaction.customId.includes("close") && !interaction.customId.includes("claim") && !interaction.customId.includes("accept") && !interaction.customId.includes("deny") && !interaction.customId.includes("reason") && !interaction.customId.includes("delete") && !interaction.customId.includes("send")) {
-                const ticketType = interaction.customId.replace("ticket_", "").replace(/_/g, " ");
-                const ticketTypeDisplay = ticketType.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+            if (interaction.customId.startsWith("ticket_")
+                && !interaction.customId.startsWith("ticket_close_request_")
+                && !interaction.customId.startsWith("ticket_claim_")
+                && !interaction.customId.startsWith("ticket_force_close_")
+                && !interaction.customId.startsWith("ticket_accept_close_")
+                && !interaction.customId.startsWith("ticket_deny_close_")
+                && !interaction.customId.startsWith("ticket_delete_")
+                && !interaction.customId.startsWith("ticket_send_transcript_")) {
+                const ticketTypeKey = interaction.customId.replace("ticket_", "");
+                const ticketTypes = getTicketTypes(false);
+                const selectedTicketType = ticketTypes.find(type => type.key === ticketTypeKey);
+
+                if (!selectedTicketType) {
+                    return interaction.reply({
+                        content: "❌ That ticket type is disabled or no longer exists.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                const ticketType = selectedTicketType.key.replace(/_/g, " ");
+                const ticketTypeDisplay = selectedTicketType.label;
                 const userId = interaction.user.id;
                 const userName = interaction.user.username;
                 const guildId = interaction.guildId;
@@ -1693,7 +2189,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     });
                 }
                 const category = await interaction.guild.channels.fetch(config.ticketCategory);
-                const channelName = `${userName.toLowerCase()}-${ticketType.toLowerCase().replace(/ /g, "-")}`;
+                const channelName = `${userName.toLowerCase()}-${ticketTypeKey.replace(/_/g, "-")}`;
                 
                 const ticketChannel = await interaction.guild.channels.create({
                     name: channelName,
@@ -1720,6 +2216,8 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 tickets.tickets[ticketId] = {
                     id: ticketId,
                     type: ticketType,
+                    typeKey: ticketTypeKey,
+                    typeLabel: ticketTypeDisplay,
                     opener: userId,
                     openerName: userName,
                     channel: ticketChannel.id,
@@ -2717,25 +3215,16 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             if (interaction.customId === "ban_modal") {
                 const userId = interaction.fields.getTextInputValue("ban_user_id");
                 const reason = interaction.fields.getTextInputValue("ban_reason");
+                const timestamp = Date.now();
 
-                const embed = new EmbedBuilder()
-                    .setColor("#8B0000")
-                    .setTitle("🚫 Ban Issued")
-                    .setDescription(`<@${userId}> has been banned from the server.`)
-                    .addFields(
-                        { name: "Reason", value: reason, inline: false },
-                        { name: "Banned By", value: interaction.user.username, inline: true }
-                    )
-                    .setTimestamp();
+                await interaction.guild.members.ban(userId, {
+                    reason: `Banned by ${interaction.user.tag} (${interaction.user.id}): ${reason}`
+                });
+
+                const embed = buildBanAuditEmbed(userId, interaction.user, reason, timestamp);
 
                 // Log to ban channel if configured
-                const banLogChannelId = getLogChannelId(interaction.guildId, "ban");
-                const banLogChannel = banLogChannelId
-                    ? (client.channels.cache.get(banLogChannelId) || await client.channels.fetch(banLogChannelId).catch(() => null))
-                    : null;
-                if (banLogChannel) {
-                    await banLogChannel.send({ embeds: [embed] }).catch(() => {});
-                }
+                await sendModerationLogEmbed(interaction.guildId, "ban", interaction.channelId, embed);
 
                 return interaction.reply({
                     embeds: [embed],
@@ -2746,25 +3235,23 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             if (interaction.customId === "blacklist_modal") {
                 const userId = interaction.fields.getTextInputValue("blacklist_user_id");
                 const reason = interaction.fields.getTextInputValue("blacklist_reason");
+                const timestamp = Date.now();
 
-                const embed = new EmbedBuilder()
-                    .setColor("#2C2F33")
-                    .setTitle("📝 Added to Blacklist")
-                    .setDescription(`<@${userId}> has been added to the blacklist.`)
-                    .addFields(
-                        { name: "Reason", value: reason, inline: false },
-                        { name: "Blacklisted By", value: interaction.user.username, inline: true }
-                    )
-                    .setTimestamp();
+                const guildBlacklistStore = getGuildBlacklistStore(interaction.guildId);
+                guildBlacklistStore[userId] = {
+                    userId,
+                    reason,
+                    username: userId,
+                    moderatorId: interaction.user.id,
+                    moderatorTag: interaction.user.tag,
+                    timestamp: new Date(timestamp).toISOString()
+                };
+                saveBlacklists();
+
+                const embed = buildBlacklistAuditEmbed(userId, interaction.user, reason, timestamp);
 
                 // Log to blacklist channel if configured
-                const blacklistLogChannelId = getLogChannelId(interaction.guildId, "blacklist");
-                const blacklistLogChannel = blacklistLogChannelId
-                    ? (client.channels.cache.get(blacklistLogChannelId) || await client.channels.fetch(blacklistLogChannelId).catch(() => null))
-                    : null;
-                if (blacklistLogChannel) {
-                    await blacklistLogChannel.send({ embeds: [embed] }).catch(() => {});
-                }
+                await sendModerationLogEmbed(interaction.guildId, "blacklist", interaction.channelId, embed);
 
                 return interaction.reply({
                     embeds: [embed],
@@ -3224,6 +3711,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
 
                 const row1b = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId("dashboard_mod_blacklist").setLabel("Blacklist").setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId("dashboard_mod_blacklist_manage").setLabel("View/Remove Blacklist").setStyle(ButtonStyle.Secondary),
                     new ButtonBuilder().setCustomId("dashboard_mod_notes").setLabel("Notes").setStyle(ButtonStyle.Primary)
                 );
 
@@ -3689,54 +4177,82 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     return interaction.showModal(modal);
                 }
                 if (subAction === "ban") {
-                    const modal = new ModalBuilder()
-                        .setCustomId("ban_modal")
-                        .setTitle("Ban Member");
+                    const guildMembers = await interaction.guild.members.fetch();
+                    const members = buildModerationTargetList(guildMembers, "ban", interaction.user.id);
 
-                    const userIdInput = new TextInputBuilder()
-                        .setCustomId("ban_user_id")
-                        .setLabel("User ID")
-                        .setPlaceholder("Enter the user ID")
-                        .setStyle(TextInputStyle.Short)
-                        .setRequired(true);
+                    if (members.length === 0) {
+                        return interaction.reply({
+                            content: "❌ No bannable members are available for selection.",
+                            flags: MessageFlags.Ephemeral
+                        });
+                    }
 
-                    const reasonInput = new TextInputBuilder()
-                        .setCustomId("ban_reason")
-                        .setLabel("Reason")
-                        .setPlaceholder("e.g., Severe rule violation")
-                        .setStyle(TextInputStyle.Paragraph)
-                        .setRequired(true);
+                    const sessionKey = createModerationSessionKey(interaction.guildId, interaction.channelId, interaction.user.id);
+                    startModerationPromptSession(sessionKey, {
+                        action: "ban",
+                        members,
+                        stage: "select"
+                    });
 
-                    const row1 = new ActionRowBuilder().addComponents(userIdInput);
-                    const row2 = new ActionRowBuilder().addComponents(reasonInput);
-                    modal.addComponents(row1, row2);
-
-                    return interaction.showModal(modal);
+                    return interaction.reply({
+                        content: "Select a member by typing their number in this channel. Your message will be deleted, then I will ask for the ban reason.",
+                        embeds: buildModerationSelectionEmbeds("ban", members),
+                        flags: MessageFlags.Ephemeral
+                    });
                 }
                 if (subAction === "blacklist") {
-                    const modal = new ModalBuilder()
-                        .setCustomId("blacklist_modal")
-                        .setTitle("Add to Blacklist");
+                    const guildMembers = await interaction.guild.members.fetch();
+                    const members = buildModerationTargetList(guildMembers, "blacklist", interaction.user.id);
 
-                    const userIdInput = new TextInputBuilder()
-                        .setCustomId("blacklist_user_id")
-                        .setLabel("User ID")
-                        .setPlaceholder("Enter the user ID")
-                        .setStyle(TextInputStyle.Short)
-                        .setRequired(true);
+                    if (members.length === 0) {
+                        return interaction.reply({
+                            content: "❌ No members are available for blacklist selection.",
+                            flags: MessageFlags.Ephemeral
+                        });
+                    }
 
-                    const reasonInput = new TextInputBuilder()
-                        .setCustomId("blacklist_reason")
-                        .setLabel("Reason")
-                        .setPlaceholder("e.g., Banned reason, known exploiter")
-                        .setStyle(TextInputStyle.Paragraph)
-                        .setRequired(true);
+                    const sessionKey = createModerationSessionKey(interaction.guildId, interaction.channelId, interaction.user.id);
+                    startModerationPromptSession(sessionKey, {
+                        action: "blacklist",
+                        members,
+                        stage: "select"
+                    });
 
-                    const row1 = new ActionRowBuilder().addComponents(userIdInput);
-                    const row2 = new ActionRowBuilder().addComponents(reasonInput);
-                    modal.addComponents(row1, row2);
+                    return interaction.reply({
+                        content: "Select a member by typing their number in this channel. Your message will be deleted, then I will ask for the blacklist reason.",
+                        embeds: buildModerationSelectionEmbeds("blacklist", members),
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+                if (subAction === "blacklist_manage") {
+                    const guildBlacklistStore = getGuildBlacklistStore(interaction.guildId);
+                    const entries = Object.values(guildBlacklistStore)
+                        .filter(entry => entry && entry.userId)
+                        .sort((left, right) => {
+                            const leftTime = new Date(left.timestamp || 0).getTime();
+                            const rightTime = new Date(right.timestamp || 0).getTime();
+                            return rightTime - leftTime;
+                        });
 
-                    return interaction.showModal(modal);
+                    if (entries.length === 0) {
+                        return interaction.reply({
+                            content: "✅ Blacklist is empty.",
+                            flags: MessageFlags.Ephemeral
+                        });
+                    }
+
+                    const sessionKey = createModerationSessionKey(interaction.guildId, interaction.channelId, interaction.user.id);
+                    startModerationPromptSession(sessionKey, {
+                        action: "blacklist_remove",
+                        entries,
+                        stage: "remove_select"
+                    });
+
+                    return interaction.reply({
+                        content: "Type a blacklist entry number to remove it, or type `cancel`.",
+                        embeds: buildBlacklistManageEmbeds(entries),
+                        flags: MessageFlags.Ephemeral
+                    });
                 }
                 if (subAction === "notes") {
                     const notesEmbed = new EmbedBuilder()
@@ -5290,6 +5806,141 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
         }
     }
 
+    // /ticket-type
+    if (interaction.commandName === "ticket-type") {
+        try {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+                return interaction.reply({
+                    content: "❌ You do not have permission to manage ticket types.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const subcommand = interaction.options.getSubcommand();
+
+            if (subcommand === "list") {
+                const types = getTicketTypes(true);
+                const description = types.length > 0
+                    ? types
+                        .map((type, index) => `${index + 1}. **${type.label}**\nKey: ${type.key} | Style: ${type.style} | Enabled: ${type.enabled ? "Yes" : "No"}`)
+                        .join("\n\n")
+                    : "No ticket types configured.";
+
+                const embed = new EmbedBuilder()
+                    .setColor("#2d5a3d")
+                    .setTitle("🎫 Configured Ticket Types")
+                    .setDescription(description)
+                    .setFooter({ text: "Use /ticket-type add, remove, or reset to update this list." })
+                    .setTimestamp();
+
+                return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+            }
+
+            if (subcommand === "reset") {
+                config.ticketTypes = DEFAULT_TICKET_TYPES.map(type => ({ ...type }));
+                saveConfig();
+
+                const embed = new EmbedBuilder()
+                    .setColor("#2d5a3d")
+                    .setTitle("✅ Ticket Types Reset")
+                    .setDescription("Ticket panel types were reset to defaults.")
+                    .setTimestamp();
+
+                return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+            }
+
+            if (subcommand === "remove") {
+                const key = sanitizeTicketTypeKey(interaction.options.getString("key"));
+                if (!key) {
+                    return interaction.reply({
+                        content: "❌ Provide a valid ticket type key.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                ensureTicketTypesConfig();
+                const beforeCount = config.ticketTypes.length;
+                config.ticketTypes = config.ticketTypes.filter(type => type.key !== key);
+
+                if (config.ticketTypes.length === beforeCount) {
+                    return interaction.reply({
+                        content: `❌ Ticket type \"${key}\" was not found.`,
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                saveConfig();
+
+                const embed = new EmbedBuilder()
+                    .setColor("#2d5a3d")
+                    .setTitle("✅ Ticket Type Removed")
+                    .setDescription(`Removed ticket type \"${key}\".`)
+                    .setTimestamp();
+
+                return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+            }
+
+            if (subcommand === "add") {
+                const key = sanitizeTicketTypeKey(interaction.options.getString("key"));
+                const label = String(interaction.options.getString("label") || "").trim().slice(0, 80);
+                const style = normalizeTicketTypeStyle(interaction.options.getString("style") || "primary");
+
+                if (!key || !label) {
+                    return interaction.reply({
+                        content: "❌ Provide a valid key and label.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                ensureTicketTypesConfig();
+                const existingIndex = config.ticketTypes.findIndex(type => type.key === key);
+
+                if (existingIndex >= 0) {
+                    config.ticketTypes[existingIndex] = {
+                        ...config.ticketTypes[existingIndex],
+                        label,
+                        style,
+                        enabled: true
+                    };
+                } else {
+                    if (config.ticketTypes.length >= 25) {
+                        return interaction.reply({
+                            content: "❌ You can only have up to 25 ticket types.",
+                            flags: MessageFlags.Ephemeral
+                        });
+                    }
+
+                    config.ticketTypes.push({
+                        key,
+                        label,
+                        style,
+                        enabled: true
+                    });
+                }
+
+                saveConfig();
+
+                const embed = new EmbedBuilder()
+                    .setColor("#2d5a3d")
+                    .setTitle("✅ Ticket Type Saved")
+                    .addFields(
+                        { name: "Key", value: key, inline: true },
+                        { name: "Label", value: label, inline: true },
+                        { name: "Style", value: style, inline: true }
+                    )
+                    .setTimestamp();
+
+                return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+            }
+        } catch (error) {
+            console.error("Ticket type command error:", error);
+            return interaction.reply({
+                content: `❌ Ticket type command failed: ${error.message || "Unknown error"}`,
+                flags: MessageFlags.Ephemeral
+            }).catch(() => {});
+        }
+    }
+
     // /ticket-panel
     if (interaction.commandName === "ticket-panel") {
         try {
@@ -5460,24 +6111,13 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 .setTitle("Welcome to HCSO Tickets")
                 .setDescription("How can we help you today? Please choose one of the ticket types below.");
 
-            const ticketButtons = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId("ticket_ia_report")
-                    .setLabel("IA Report")
-                    .setStyle(ButtonStyle.Primary),
-                new ButtonBuilder()
-                    .setCustomId("ticket_general_support")
-                    .setLabel("General Support")
-                    .setStyle(ButtonStyle.Primary),
-                new ButtonBuilder()
-                    .setCustomId("ticket_ia_inquiry")
-                    .setLabel("IA Inquiry")
-                    .setStyle(ButtonStyle.Primary),
-                new ButtonBuilder()
-                    .setCustomId("ticket_appeal_ban")
-                    .setLabel("Appeal Ban")
-                    .setStyle(ButtonStyle.Primary)
-            );
+            const ticketButtons = buildTicketPanelRows();
+            if (ticketButtons.length === 0) {
+                return interaction.reply({
+                    content: "❌ No ticket types are configured. Use /ticket-type add first.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
 
             await interaction.reply({
                 embeds: [ticketEmbed],
@@ -6172,6 +6812,151 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
     } catch (error) {
         console.error(error);
         await safeInteractionErrorReply(interaction, `Error: ${error.message}`);
+    }
+});
+
+client.on("messageCreate", async message => {
+    if (message.author.bot || !message.guild) return;
+
+    const sessionKey = createModerationSessionKey(message.guild.id, message.channelId, message.author.id);
+    const session = moderationPromptSessions.get(sessionKey);
+
+    if (!session) return;
+
+    try {
+        if (session.stage === "remove_select" && session.action === "blacklist_remove") {
+            const normalized = message.content.trim().toLowerCase();
+            await message.delete().catch(() => {});
+
+            if (normalized === "cancel") {
+                clearModerationPromptSession(sessionKey);
+                await sendTemporaryChannelNotice(
+                    message.channel,
+                    `${message.author}, blacklist removal cancelled.`,
+                    10000
+                );
+                return;
+            }
+
+            const selectedNumber = parseSelectionNumber(normalized);
+            if (!selectedNumber || selectedNumber < 1 || selectedNumber > session.entries.length) {
+                await sendTemporaryChannelNotice(
+                    message.channel,
+                    `${message.author}, send a valid blacklist entry number or \`cancel\`.`,
+                    10000
+                );
+                return;
+            }
+
+            const selectedEntry = session.entries[selectedNumber - 1];
+            const guildBlacklistStore = getGuildBlacklistStore(message.guild.id);
+
+            if (guildBlacklistStore[selectedEntry.userId]) {
+                delete guildBlacklistStore[selectedEntry.userId];
+                saveBlacklists();
+            }
+
+            clearModerationPromptSession(sessionKey);
+
+            const removedEmbed = new EmbedBuilder()
+                .setColor("#2d5a3d")
+                .setTitle("✅ Blacklist Entry Removed")
+                .setDescription(`<@${selectedEntry.userId}> has been removed from the blacklist.`)
+                .addFields(
+                    { name: "Removed By", value: `<@${message.author.id}>`, inline: true },
+                    { name: "Original Reason", value: truncateForField(selectedEntry.reason || "No reason provided"), inline: false },
+                    { name: "Time", value: formatDiscordTimestamp(Date.now()), inline: true }
+                )
+                .setTimestamp();
+
+            await message.channel.send({ embeds: [removedEmbed] }).catch(() => {});
+            await sendModerationLogEmbed(message.guild.id, "blacklist", message.channelId, removedEmbed);
+            return;
+        }
+
+        if (session.stage === "select") {
+            const selectedNumber = parseSelectionNumber(message.content);
+            await message.delete().catch(() => {});
+
+            if (!selectedNumber || selectedNumber < 1 || selectedNumber > session.members.length) {
+                await sendTemporaryChannelNotice(
+                    message.channel,
+                    `${message.author}, send a valid member number from the list.`,
+                    10000
+                );
+                return;
+            }
+
+            const selectedMember = session.members[selectedNumber - 1];
+            moderationPromptSessions.set(sessionKey, {
+                ...session,
+                stage: "reason",
+                selectedMember
+            });
+
+            await sendTemporaryChannelNotice(
+                message.channel,
+                `${message.author}, send the ${session.action} reason for **${selectedMember.displayName}**. Your message will be deleted.`,
+                30000
+            );
+            return;
+        }
+
+        if (session.stage !== "reason") {
+            return;
+        }
+
+        const reason = message.content.trim();
+        await message.delete().catch(() => {});
+
+        if (!reason) {
+            await sendTemporaryChannelNotice(
+                message.channel,
+                `${message.author}, send a reason so I can finish the ${session.action}.`,
+                10000
+            );
+            return;
+        }
+
+        clearModerationPromptSession(sessionKey);
+
+        const timestamp = Date.now();
+        const moderator = message.author;
+        const target = session.selectedMember;
+
+        if (session.action === "ban") {
+            await message.guild.members.ban(target.id, {
+                reason: `Banned by ${moderator.tag} (${moderator.id}): ${reason}`
+            });
+
+            const embed = buildBanAuditEmbed(target.id, moderator, reason, timestamp);
+            await message.channel.send({ embeds: [embed] }).catch(() => {});
+            await sendModerationLogEmbed(message.guild.id, "ban", message.channelId, embed);
+            return;
+        }
+
+        const guildBlacklistStore = getGuildBlacklistStore(message.guild.id);
+        guildBlacklistStore[target.id] = {
+            userId: target.id,
+            username: target.username,
+            displayName: target.displayName,
+            reason,
+            moderatorId: moderator.id,
+            moderatorTag: moderator.tag,
+            timestamp: new Date(timestamp).toISOString()
+        };
+        saveBlacklists();
+
+        const embed = buildBlacklistAuditEmbed(target.id, moderator, reason, timestamp);
+        await message.channel.send({ embeds: [embed] }).catch(() => {});
+        await sendModerationLogEmbed(message.guild.id, "blacklist", message.channelId, embed);
+    } catch (error) {
+        clearModerationPromptSession(sessionKey);
+        await sendTemporaryChannelNotice(
+            message.channel,
+            `${message.author}, I couldn't finish that ${session.action}: ${error.message}`,
+            15000
+        );
     }
 });
 
