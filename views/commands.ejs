@@ -375,10 +375,15 @@
     <div class="cmd-card" style="max-width:520px;">
       <h4 class="cmd-title">📢 Post Announcement</h4>
       <form class="cmd-form" data-endpoint="/api/commands/announce">
+        <label>Server</label>
+        <select name="serverId" id="announce-server" required>
+          <option value="">— Select server —</option>
+          <% servers.forEach(s => { %><option value="<%= s.id %>"><%= s.name %> (<%= s.shortName %>)</option><% }); %>
+        </select>
         <label>Channel</label>
-        <select name="channelId" required>
+        <select name="channelId" id="announce-channel" required>
           <option value="">— Select channel —</option>
-          <% channels.forEach(c => { %><option value="<%= c.id %>">#<%= c.name %> (<%= c.parent %>)</option><% }); %>
+          <% channels.forEach(c => { %><option value="<%= c.id %>" data-guild-id="<%= c.guildId %>">#<%= c.name %> (<%= c.parent %>)</option><% }); %>
         </select>
         <label>Title (optional)</label>
         <input type="text" name="title" maxlength="256" placeholder="Announcement title">
@@ -392,6 +397,28 @@
 </div><!-- /tab-announce -->
 
 <script>
+  // Announcement server/channel filtering
+  const channelsByServer = <%- JSON.stringify(channelsByServer) %>;
+  
+  const serverSelect = document.getElementById("announce-server");
+  const channelSelect = document.getElementById("announce-channel");
+  
+  if (serverSelect && channelSelect) {
+    serverSelect.addEventListener("change", (e) => {
+      const selectedServerId = e.target.value;
+      channelSelect.innerHTML = '<option value="">— Select channel —</option>';
+      
+      if (selectedServerId && channelsByServer[selectedServerId]) {
+        channelsByServer[selectedServerId].forEach(channel => {
+          const option = document.createElement("option");
+          option.value = channel.id;
+          option.textContent = `#${channel.name} (${channel.parent})`;
+          channelSelect.appendChild(option);
+        });
+      }
+    });
+  }
+
   // Tab switching
   document.querySelectorAll(".tab-btn").forEach(btn => {
     btn.addEventListener("click", () => {

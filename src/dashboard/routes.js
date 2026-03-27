@@ -212,6 +212,8 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         const guild = await getDashboardGuild();
         let members  = [];
         let channels = [];
+        let servers = [];
+        let channelsByServer = {};
 
         if (guild) {
             try {
@@ -224,10 +226,28 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
 
                 channels = [...guild.channels.cache.values()]
                     .filter(c => c?.isTextBased() && !c.isDMBased() && c.type !== 4)
-                    .map(c => ({ id: c.id, name: c.name, parent: c.parent?.name || "Uncategorized" }))
+                    .map(c => ({ id: c.id, name: c.name, parent: c.parent?.name || "Uncategorized", guildId: guild.id }))
                     .sort((a, b) => a.name.localeCompare(b.name));
             } catch (e) {
                 console.error("[Dashboard] Member/channel fetch:", e.message);
+            }
+        }
+
+        // Collect all accessible servers for announcement form
+        const depts = getAllDepartments();
+        for (const [guildId, deptInfo] of Object.entries(depts)) {
+            try {
+                const g = await client.guilds.fetch(guildId);
+                if (g) {
+                    servers.push({ id: guildId, name: g.name, shortName: deptInfo.shortName });
+                    await g.channels.fetch();
+                    channelsByServer[guildId] = [...g.channels.cache.values()]
+                        .filter(c => c?.isTextBased() && !c.isDMBased() && c.type !== 4)
+                        .map(c => ({ id: c.id, name: c.name, parent: c.parent?.name || "Uncategorized", guildId: guildId }))
+                        .sort((a, b) => a.name.localeCompare(b.name));
+                }
+            } catch (e) {
+                console.error(`[Dashboard] Failed to fetch guild ${guildId}:`, e.message);
             }
         }
 
@@ -254,6 +274,8 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             page: "commands",
             members,
             channels,
+            servers,
+            channelsByServer,
             openCases,
             allCases,
             usersOnLoa
