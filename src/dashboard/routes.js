@@ -81,8 +81,23 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         }
     }
 
+    // Returns the exact key used in casesData.cases that matches the given id,
+    // trying exact → uppercase → case-insensitive scan so old keys like
+    // "CASE-000NaN" are still found even when the caller uppercases them.
+    function resolveCaseKey(rawId) {
+        const id = String(rawId || "").trim();
+        if (!id) return null;
+        const cases = casesData.cases || {};
+        if (id in cases) return id;
+        const up = id.toUpperCase();
+        if (up in cases) return up;
+        const lower = id.toLowerCase();
+        const found = Object.keys(cases).find(k => k.toLowerCase() === lower);
+        return found || null;
+    }
+
     function normalizeCaseId(caseId) {
-        return String(caseId || "").trim().toUpperCase();
+        return String(caseId || "").trim();
     }
 
     function isCaseClosed(entry) {
@@ -812,11 +827,12 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Case View ────────────────────────────────────────────────────────
     router.post("/api/commands/case-view", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const caseId = normalizeCaseId(req.body.caseId);
-            if (!caseId) return res.status(400).json({ error: "Missing caseId" });
+            const rawId = normalizeCaseId(req.body.caseId);
+            if (!rawId) return res.status(400).json({ error: "Missing caseId" });
+            const caseId = resolveCaseKey(rawId);
+            if (!caseId) return res.status(404).json({ error: "Case not found" });
 
-            const entry = casesData.cases?.[caseId];
-            if (!entry) return res.status(404).json({ error: "Case not found" });
+            const entry = casesData.cases[caseId];
 
             const evidenceCount = Array.isArray(entry.evidence) ? entry.evidence.length : 0;
             const assignedText = entry.assignedTo ? `<@${entry.assignedTo}>` : "Unassigned";
@@ -873,14 +889,15 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Case Assign ──────────────────────────────────────────────────────
     router.post("/api/commands/case-assign", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const caseId = normalizeCaseId(req.body.caseId);
+            const rawId = normalizeCaseId(req.body.caseId);
             const userId = String(req.body.userId || "").trim();
             const note = String(req.body.note || "").trim() || "No note provided";
 
-            if (!caseId || !userId) return res.status(400).json({ error: "Missing caseId or userId" });
+            if (!rawId || !userId) return res.status(400).json({ error: "Missing caseId or userId" });
+            const caseId = resolveCaseKey(rawId);
+            if (!caseId) return res.status(404).json({ error: "Case not found" });
 
-            const entry = casesData.cases?.[caseId];
-            if (!entry) return res.status(404).json({ error: "Case not found" });
+            const entry = casesData.cases[caseId];
 
             entry.assignedTo = userId;
             entry.assignedBy = req.session.user.id;
@@ -913,12 +930,13 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Case Unassign ────────────────────────────────────────────────────
     router.post("/api/commands/case-unassign", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const caseId = normalizeCaseId(req.body.caseId);
+            const rawId = normalizeCaseId(req.body.caseId);
             const reason = String(req.body.reason || "").trim() || "Not specified";
-            if (!caseId) return res.status(400).json({ error: "Missing caseId" });
+            if (!rawId) return res.status(400).json({ error: "Missing caseId" });
+            const caseId = resolveCaseKey(rawId);
+            if (!caseId) return res.status(404).json({ error: "Case not found" });
 
-            const entry = casesData.cases?.[caseId];
-            if (!entry) return res.status(404).json({ error: "Case not found" });
+            const entry = casesData.cases[caseId];
             if (!entry.assignedTo) return res.status(400).json({ error: "Case is not assigned" });
 
             const previousAssignee = entry.assignedTo;
@@ -953,12 +971,13 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Evidence Add ─────────────────────────────────────────────────────
     router.post("/api/commands/evidence-add", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const caseId = normalizeCaseId(req.body.caseId);
+            const rawId = normalizeCaseId(req.body.caseId);
             const description = String(req.body.description || "").trim();
-            if (!caseId || !description) return res.status(400).json({ error: "Missing caseId or description" });
+            if (!rawId || !description) return res.status(400).json({ error: "Missing caseId or description" });
+            const caseId = resolveCaseKey(rawId);
+            if (!caseId) return res.status(404).json({ error: "Case not found" });
 
-            const entry = casesData.cases?.[caseId];
-            if (!entry) return res.status(404).json({ error: "Case not found" });
+            const entry = casesData.cases[caseId];
 
             const evidenceId = `EVI-${Date.now()}`;
             if (!Array.isArray(entry.evidence)) entry.evidence = [];
@@ -993,12 +1012,13 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Case Close ───────────────────────────────────────────────────────
     router.post("/api/commands/case-close", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const caseId = normalizeCaseId(req.body.caseId);
+            const rawId = normalizeCaseId(req.body.caseId);
             const reason = String(req.body.reason || "").trim();
-            if (!caseId) return res.status(400).json({ error: "Missing caseId" });
+            if (!rawId) return res.status(400).json({ error: "Missing caseId" });
+            const caseId = resolveCaseKey(rawId);
+            if (!caseId) return res.status(404).json({ error: "Case not found" });
 
-            const entry = casesData.cases?.[caseId];
-            if (!entry) return res.status(404).json({ error: "Case not found" });
+            const entry = casesData.cases[caseId];
 
             if (isCaseClosed(entry)) return res.status(400).json({ error: "Case is already closed" });
 
@@ -1037,12 +1057,13 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Case Reopen ──────────────────────────────────────────────────────
     router.post("/api/commands/case-reopen", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const caseId = normalizeCaseId(req.body.caseId);
+            const rawId = normalizeCaseId(req.body.caseId);
             const reason = String(req.body.reason || "").trim();
-            if (!caseId) return res.status(400).json({ error: "Missing caseId" });
+            if (!rawId) return res.status(400).json({ error: "Missing caseId" });
+            const caseId = resolveCaseKey(rawId);
+            if (!caseId) return res.status(404).json({ error: "Case not found" });
 
-            const entry = casesData.cases?.[caseId];
-            if (!entry) return res.status(404).json({ error: "Case not found" });
+            const entry = casesData.cases[caseId];
             if (!isCaseClosed(entry)) return res.status(400).json({ error: "Case is not closed" });
 
             setCaseStatus(entry, false);
@@ -1077,17 +1098,18 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Case Delete ──────────────────────────────────────────────────────
     router.post("/api/commands/case-delete", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const caseId = normalizeCaseId(req.body.caseId);
+            const rawId = normalizeCaseId(req.body.caseId);
             const confirmation = String(req.body.confirmation || "").trim().toUpperCase();
-            if (!caseId) return res.status(400).json({ error: "Missing caseId" });
+            if (!rawId) return res.status(400).json({ error: "Missing caseId" });
 
             if (confirmation !== "YES") {
                 return res.status(400).json({ error: "Deletion cancelled. Type YES to confirm." });
             }
 
-            const entry = casesData.cases?.[caseId];
-            if (!entry) return res.status(404).json({ error: "Case not found" });
+            const caseId = resolveCaseKey(rawId);
+            if (!caseId) return res.status(404).json({ error: "Case not found" });
 
+            const entry = casesData.cases[caseId];
             delete casesData.cases[caseId];
             saveCases();
 
@@ -1113,13 +1135,14 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Case Edit ────────────────────────────────────────────────────────
     router.post("/api/commands/case-edit", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const caseId = normalizeCaseId(req.body.caseId);
+            const rawId = normalizeCaseId(req.body.caseId);
             const field = String(req.body.field || "").trim();
             const value = String(req.body.value || "").trim();
-            if (!caseId || !field) return res.status(400).json({ error: "Missing caseId or field" });
+            if (!rawId || !field) return res.status(400).json({ error: "Missing caseId or field" });
+            const caseId = resolveCaseKey(rawId);
+            if (!caseId) return res.status(404).json({ error: "Case not found" });
 
-            const entry = casesData.cases?.[caseId];
-            if (!entry) return res.status(404).json({ error: "Case not found" });
+            const entry = casesData.cases[caseId];
 
             const allowedFields = new Set(["title", "incidentType", "location", "suspect", "summary", "status", "assignedTo"]);
             if (!allowedFields.has(field)) {
