@@ -13,14 +13,15 @@ import { Router } from "express";
 import { getAllDepartments, getBranding, resolveDepartmentForGuild } from "../embeds/departmentThemes.js";
 
 /**
- * @param {{ requireStaff: Function, segmentGuard: Function, serverStats: Object, client: Object,
+ * @param {{ requireAuth: Function, requireStaff: Function, segmentGuard: Function, serverStats: Object, client: Object,
  *           config: Object, saveConfig: Function,
  *           strikes: Object, saveStrikes: Function,
  *           getUserStrikeEntries: Function, syncUserStrikeRoles: Function,
+ *           ROLE_SOURCE_GUILD_ID: string,
  *           MAX_STRIKES: number, patrols: Object, loa: Object, casesData: Object, saveCases: Function, saveLOA: Function }} deps
  * @returns {import("express").Router}
  */
-export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats, BOT_OWNER_IDS = [], client, config, saveConfig, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES, patrols, loa, casesData, saveCases, saveLOA }) {
+export function createDepartmentRoutes({ requireAuth, requireStaff, segmentGuard, serverStats, BOT_OWNER_IDS = [], client, config, saveConfig, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, ROLE_SOURCE_GUILD_ID, MAX_STRIKES, patrols, loa, casesData, saveCases, saveLOA }) {
     const router = Router();
     const HCSO_GUILD_ID = "1482203107432595601";
     const STRIKE_ROLE_IDS = [
@@ -29,6 +30,8 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
         "1485085025157382244"
     ];
     const SHERIFF_ALERT_ROLE_ID = "1482203108108013584";
+    const DEFAULT_ROLE_SOURCE_GUILD_ID = "1318018654515888138";
+    const roleSourceGuildId = String(ROLE_SOURCE_GUILD_ID || DEFAULT_ROLE_SOURCE_GUILD_ID);
 
     function isSupervisorPlus(member) {
         if (!member) return false;
@@ -72,7 +75,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
 
     // ── All servers / departments overview ────────────────────────────────────
         // -- Joint Operations --
-    router.get("/departments/joint", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.get("/departments/joint", requireAuth, segmentGuard("departments"), async (req, res) => {
         try {
             const branding    = getBranding();
             const departments = getAllDepartments();
@@ -123,7 +126,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
             res.render("error", { page: "error", message: "Could not load joint operations.", branding: getBranding() });
         }
     });
-    router.get("/servers", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.get("/servers", requireAuth, segmentGuard("departments"), async (req, res) => {
         try {
             const requesterId = req.session.user?.id || "";
             const allServers  = await serverStats.getAllServers();
@@ -155,7 +158,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── Per-department member management page ─────────────────────────────────
-    router.get("/departments/:guildId", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.get("/departments/:guildId", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const requestedGuildId = String(req.params.guildId || "");
             const guildId = await resolveDashboardGuildId(requestedGuildId);
@@ -332,13 +335,42 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
         if (rolePolicies.length === 0) return true;
 
         for (const policy of rolePolicies) {
-            const roleIds = await getRoleIdsForViewerInGuild(userId, policy.guildId);
-            if (policy.allowedRoleIds.some(roleId => roleIds.includes(roleId))) {
-                return true;
+            const candidateGuildIds = [...new Set([policy.guildId, roleSourceGuildId].map(id => String(id || "")).filter(Boolean))];
+            for (const candidateGuildId of candidateGuildIds) {
+                const roleIds = await getRoleIdsForViewerInGuild(userId, candidateGuildId);
+                if (policy.allowedRoleIds.some(roleId => roleIds.includes(roleId))) {
+                    return true;
+                }
             }
         }
 
         return false;
+    }
+
+    async function requireDepartmentAccess(req, res, next) {
+        if (!req.session.user) {
+            req.session.returnTo = req.originalUrl;
+            return res.redirect("/auth/discord");
+        }
+
+        const requesterId = req.session.user.id;
+        const requestedGuildId = String(
+            req.params?.guildId
+            || req.body?.guildId
+            || req.query?.guildId
+            || ""
+        );
+
+        if (!requestedGuildId) return next();
+
+        const resolvedGuildId = await resolveDashboardGuildId(requestedGuildId);
+        const allowed = await canAccessDepartmentByGuildIds(requesterId, requestedGuildId, resolvedGuildId);
+        if (allowed) return next();
+
+        if (req.path.startsWith("/api/")) {
+            return res.status(403).json({ error: "Access denied for this department" });
+        }
+        return res.render("access-denied", { page: "denied" });
     }
 
     async function resolveDashboardGuildId(requestedGuildId) {
@@ -362,7 +394,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     }
 
     // ── API: Strike ───────────────────────────────────────────────────────────
-    router.post("/api/guild/:guildId/strike", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.post("/api/guild/:guildId/strike", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const { userId, reason } = req.body;
@@ -410,7 +442,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── API: Strike Remove ────────────────────────────────────────────────────
-    router.post("/api/guild/:guildId/strike-remove", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.post("/api/guild/:guildId/strike-remove", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const { userId, amount } = req.body;
@@ -431,7 +463,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── API: Kick ─────────────────────────────────────────────────────────────
-    router.post("/api/guild/:guildId/kick", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.post("/api/guild/:guildId/kick", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const { userId, reason } = req.body;
@@ -452,7 +484,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── API: Ban ──────────────────────────────────────────────────────────────
-    router.post("/api/guild/:guildId/ban", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.post("/api/guild/:guildId/ban", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const { userId, reason } = req.body;
@@ -471,7 +503,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── API: Timeout ──────────────────────────────────────────────────────────
-    router.post("/api/guild/:guildId/timeout", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.post("/api/guild/:guildId/timeout", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const { userId, minutes, reason } = req.body;
@@ -493,7 +525,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── API: Unban ────────────────────────────────────────────────────────────
-    router.post("/api/guild/:guildId/unban", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.post("/api/guild/:guildId/unban", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const { userId } = req.body;
@@ -510,7 +542,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── API: Case – Create ────────────────────────────────────────────────────
-    router.post("/api/guild/:guildId/case-create", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.post("/api/guild/:guildId/case-create", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const { title, incidentType, location, suspect, summary, jointOps } = req.body;
@@ -543,7 +575,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── API: Case – View ──────────────────────────────────────────────────────
-    router.post("/api/guild/:guildId/case-view", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.post("/api/guild/:guildId/case-view", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const { caseId } = req.body;
@@ -565,7 +597,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── API: Case – Close ─────────────────────────────────────────────────────
-    router.post("/api/guild/:guildId/case-close", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.post("/api/guild/:guildId/case-close", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const { caseId, reason } = req.body;
@@ -592,7 +624,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── API: Case – Assign ────────────────────────────────────────────────────
-    router.post("/api/guild/:guildId/case-assign", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.post("/api/guild/:guildId/case-assign", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const { caseId, assignTo } = req.body;
@@ -617,7 +649,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── API: Evidence – Add ───────────────────────────────────────────────────
-    router.post("/api/guild/:guildId/evidence-add", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.post("/api/guild/:guildId/evidence-add", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const { caseId, evidence } = req.body;
@@ -642,7 +674,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── API: Case – Delete ────────────────────────────────────────────────────
-    router.post("/api/guild/:guildId/case-delete", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.post("/api/guild/:guildId/case-delete", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const { caseId, confirmation } = req.body;
@@ -667,7 +699,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── API: LOA – Set ────────────────────────────────────────────────────────
-    router.post("/api/guild/:guildId/loa", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.post("/api/guild/:guildId/loa", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { userId, startDate, endDate, reason } = req.body;
             if (!userId || !endDate) return res.status(400).json({ error: "userId and endDate required" });
@@ -687,7 +719,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── API: LOA – End ────────────────────────────────────────────────────────
-    router.post("/api/guild/:guildId/end-loa", requireStaff, segmentGuard("departments"), async (req, res) => {
+    router.post("/api/guild/:guildId/end-loa", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const { userId } = req.body;
@@ -725,14 +757,14 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── Department Settings: Fetch main server roles and current config ──────────
-    router.get("/api/guild/:guildId/settings", requireStaff, async (req, res) => {
+    router.get("/api/guild/:guildId/settings", requireAuth, requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const guild = await getGuild(guildId);
             if (!guild) return res.status(404).json({ error: "Guild not found" });
 
-            // Fetch roles from MAIN server (not the department guild)
-            const mainGuild = client.guilds.cache.get(guildId);
+            // Fetch roles from role source guild (usually the main server).
+            const mainGuild = await getGuild(roleSourceGuildId);
             if (!mainGuild) return res.status(404).json({ error: "Guild not found" });
 
             const mainServerRoles = (await mainGuild.roles.fetch().catch(() => null))?.map(r => ({
@@ -757,7 +789,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
 
     // ── Department Settings: Save department access ──────────────────────────
-    router.post("/api/guild/:guildId/settings/department-access", requireStaff, async (req, res) => {
+    router.post("/api/guild/:guildId/settings/department-access", requireAuth, requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
             const { roleIds } = req.body;

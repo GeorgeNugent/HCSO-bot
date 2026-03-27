@@ -39,6 +39,10 @@ export function startDashboard(context) {
     const BOT_OWNER_IDS = ["967375704486449222", "327951443090735104"];
     const PRIMARY_BOT_OWNER_ID = BOT_OWNER_IDS[0];
     const DASHBOARD_SEGMENTS = ["home", "status", "commands", "logs", "settings", "applications", "departments"];
+    const STAFF_ROLE_KEYWORDS = [
+        "administrator", "management", "developer", "bot staff",
+        "supervisor", "ia", "sheriff", "staff", "owner", "co-owner"
+    ];
 
     // ── Express app ──────────────────────────────────────────────────────────
     const app = express();
@@ -138,8 +142,105 @@ export function startDashboard(context) {
         return async (req, res, next) => requireSegment(req, res, next, segment);
     }
 
+    function collectStaffRolePolicies() {
+        const policyMap = new Map();
+
+        const departmentAccessByGuild = context.config?.departmentAccessByGuild && typeof context.config.departmentAccessByGuild === "object"
+            ? context.config.departmentAccessByGuild
+            : {};
+        const departmentRoleSourceByGuild = context.config?.departmentRoleSourceByGuild && typeof context.config.departmentRoleSourceByGuild === "object"
+            ? context.config.departmentRoleSourceByGuild
+            : {};
+        const configuredDepartments = getAllDepartments();
+        const allowedDepartmentShortNames = new Set(["HCSO", "FHP", "CPD"]);
+
+        for (const [departmentGuildId, dept] of Object.entries(configuredDepartments || {})) {
+            const shortName = String(dept?.shortName || "").toUpperCase();
+            if (!allowedDepartmentShortNames.has(shortName)) continue;
+
+            const roleIds = Array.isArray(departmentAccessByGuild[departmentGuildId])
+                ? departmentAccessByGuild[departmentGuildId].map(String).filter(Boolean)
+                : [];
+            if (roleIds.length === 0) continue;
+
+            const sourceGuildId = String(departmentRoleSourceByGuild[departmentGuildId] || MAIN_ROLE_GUILD_ID || "");
+            const candidateGuildIds = [...new Set([departmentGuildId, sourceGuildId].map(id => String(id || "")).filter(Boolean))];
+            for (const guildId of candidateGuildIds) {
+                const existing = policyMap.get(guildId) || new Set();
+                for (const roleId of roleIds) existing.add(roleId);
+                policyMap.set(guildId, existing);
+            }
+        }
+
+        // "Staff" access is derived from dashboard segment role allow-lists.
+        const dashboardSegmentAccessByGuild = context.config?.dashboardSegmentAccessByGuild && typeof context.config.dashboardSegmentAccessByGuild === "object"
+            ? context.config.dashboardSegmentAccessByGuild
+            : {};
+        for (const [guildId, segmentMap] of Object.entries(dashboardSegmentAccessByGuild)) {
+            if (!segmentMap || typeof segmentMap !== "object") continue;
+            const existing = policyMap.get(String(guildId)) || new Set();
+            for (const ids of Object.values(segmentMap)) {
+                if (!Array.isArray(ids)) continue;
+                for (const roleId of ids) existing.add(String(roleId));
+            }
+            if (existing.size > 0) policyMap.set(String(guildId), existing);
+        }
+
+        const legacySegmentAccess = context.config?.dashboardSegmentAccess && typeof context.config.dashboardSegmentAccess === "object"
+            ? context.config.dashboardSegmentAccess
+            : {};
+        const legacyRoleIds = Object.values(legacySegmentAccess)
+            .filter(Array.isArray)
+            .flat()
+            .map(String)
+            .filter(Boolean);
+        if (legacyRoleIds.length > 0) {
+            const legacyGuildId = String(MAIN_ROLE_GUILD_ID || GUILD_ID || "");
+            if (legacyGuildId) {
+                const existing = policyMap.get(legacyGuildId) || new Set();
+                for (const roleId of legacyRoleIds) existing.add(roleId);
+                policyMap.set(legacyGuildId, existing);
+            }
+        }
+
+        return [...policyMap.entries()].map(([guildId, roleSet]) => ({
+            guildId,
+            roleIds: [...roleSet]
+        }));
+    }
+
+    async function hasStaffAccess(userId) {
+        if (BOT_OWNER_IDS.includes(String(userId))) return true;
+
+        const primaryGuild = await getDashboardGuild();
+        if (primaryGuild) {
+            const member = await primaryGuild.members.fetch(userId).catch(() => null);
+            if (member) {
+                if (member.permissions.has(8n)) return true;
+                const hasNamedStaffRole = member.roles.cache.some(role => {
+                    const roleName = String(role.name || "").toLowerCase();
+                    return STAFF_ROLE_KEYWORDS.some(keyword => roleName.includes(keyword));
+                });
+                if (hasNamedStaffRole) return true;
+            }
+        }
+
+        const rolePolicies = collectStaffRolePolicies();
+        for (const policy of rolePolicies) {
+            if (!policy.guildId || policy.roleIds.length === 0) continue;
+            const viewerRoleIds = await getViewerRoleIds(userId, policy.guildId);
+            if (policy.roleIds.some(roleId => viewerRoleIds.includes(roleId))) {
+                return true;
+            }
+        }
+
+        console.log(`[Dashboard Auth] Denied staff access for ${userId}. Checked policies: ${JSON.stringify(rolePolicies.map(p => ({ guildId: p.guildId, roleCount: p.roleIds.length })))}`);
+
+        return false;
+    }
+
     // ── Sub-modules ───────────────────────────────────────────────────────────
-    const { requireAuth, requireStaff } = createPermissions();
+    const { requireAuth, requireStaff } = createPermissions({ hasStaffAccess });
     const serverStats = createServerStats(client);
 
     // ── res.locals available in every view ────────────────────────────────────
@@ -194,8 +295,17 @@ export function startDashboard(context) {
                     continue;
                 }
 
-                const viewerRoleIds = await getViewerRoleIds(userId, departmentGuildId);
-                if (allowedRoleIds.some(roleId => viewerRoleIds.includes(roleId))) {
+                const candidateGuildIds = [...new Set([departmentGuildId, MAIN_ROLE_GUILD_ID, GUILD_ID].map(id => String(id || "")).filter(Boolean))];
+                let hasAccess = false;
+                for (const guildId of candidateGuildIds) {
+                    const viewerRoleIds = await getViewerRoleIds(userId, guildId);
+                    if (allowedRoleIds.some(roleId => viewerRoleIds.includes(roleId))) {
+                        hasAccess = true;
+                        break;
+                    }
+                }
+
+                if (hasAccess) {
                     accessibleDepartmentIds.push(departmentGuildId);
                 }
             }
@@ -216,7 +326,7 @@ export function startDashboard(context) {
     });
 
     // ── Mount routers ─────────────────────────────────────────────────────────
-    app.use(createAuthRouter(context, { getDashboardGuild, requireAuth }));
+    app.use(createAuthRouter(context, { getDashboardGuild, requireAuth, hasStaffAccess }));
     app.use(createMainRoutes(context,  {
         requireAuth,
         requireStaff,
@@ -230,6 +340,7 @@ export function startDashboard(context) {
         ROLE_SOURCE_GUILD_ID: MAIN_ROLE_GUILD_ID
     }));
     app.use(createDepartmentRoutes({
+        requireAuth,
         requireStaff,
         segmentGuard,
         serverStats,
@@ -242,6 +353,7 @@ export function startDashboard(context) {
         getUserStrikeEntries: context.getUserStrikeEntries,
         syncUserStrikeRoles:  context.syncUserStrikeRoles,
         MAX_STRIKES:          context.MAX_STRIKES,
+        ROLE_SOURCE_GUILD_ID: MAIN_ROLE_GUILD_ID,
         patrols:              context.patrols,
         loa:                  context.loa,
         casesData:            context.casesData,

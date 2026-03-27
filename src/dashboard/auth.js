@@ -16,7 +16,7 @@ const STAFF_ROLE_NAMES = [
  * @param {{ getDashboardGuild: Function, requireAuth: Function }} helpers
  * @returns {import("express").Router}
  */
-export function createAuthRouter(context, { getDashboardGuild, requireAuth }) {
+export function createAuthRouter(context, { getDashboardGuild, requireAuth, hasStaffAccess }) {
     const { client } = context;
 
     const CLIENT_ID     = process.env.CLIENT_ID;
@@ -82,7 +82,9 @@ export function createAuthRouter(context, { getDashboardGuild, requireAuth }) {
                 ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png?size=64`
                 : `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(userData.id) % 5n)}.png`;
 
-            const isStaff = await isStaffMember(userData.id);
+            const isStaff = typeof hasStaffAccess === "function"
+                ? await hasStaffAccess(userData.id)
+                : await isStaffMember(userData.id);
 
             req.session.user = {
                 id:            userData.id,
