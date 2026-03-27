@@ -355,7 +355,7 @@
             <% (members||[]).forEach(function(m){ %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
           </select>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-assign',{caseId:document.getElementById('dc-assign-id').value,userId:document.getElementById('dc-assign-user').value},'dc-assign-result')">Assign</button>
+        <button class="btn btn-primary btn-sm" onclick="deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-assign',{caseId:document.getElementById('dc-assign-id').value,assignTo:document.getElementById('dc-assign-user').value},'dc-assign-result')">Assign</button>
         <div id="dc-assign-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
       </div>
     </div>
