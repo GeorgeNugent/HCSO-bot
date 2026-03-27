@@ -97,7 +97,7 @@
   <% } else { %>
     <div class="dept-breakdown-grid">
       <% deptGuilds.forEach(function(dept) { %>
-      <div class="dept-card" style="border-top: 3px solid <%= dept.color %>;">
+      <div class="dept-card" data-dept-color="<%= dept.color %>">
         <div class="dept-card-header">
           <% if (dept.logo) { %>
             <img src="<%= dept.logo %>" alt="" class="dept-card-icon" onerror="this.style.display='none'">
@@ -113,7 +113,7 @@
         </div>
         <div class="dept-card-stats">
           <div class="dept-cs">
-            <div class="dept-cs-value" style="color:<%= dept.color %>;"><%= dept.memberCount.toLocaleString() %></div>
+            <div class="dept-cs-value" data-stat-color="<%= dept.color %>"><%= dept.memberCount.toLocaleString() %></div>
             <div class="dept-cs-label">Members</div>
           </div>
           <div class="dept-cs">
@@ -129,5 +129,17 @@
     </div>
   <% } %>
 </div>
+
+<script>
+  document.querySelectorAll('[data-dept-color]').forEach(function(el) {
+    var color = el.getAttribute('data-dept-color');
+    if (color) el.style.borderTop = '3px solid ' + color;
+  });
+
+  document.querySelectorAll('[data-stat-color]').forEach(function(el) {
+    var color = el.getAttribute('data-stat-color');
+    if (color) el.style.color = color;
+  });
+</script>
 
 <%- include('partials/footer') %>
