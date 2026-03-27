@@ -1321,7 +1321,13 @@ const commands = [
 
 // Register commands
 const rest = new REST({ version: "10" }).setToken(TOKEN);
-await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
+try {
+    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
+    console.log(`Registered ${commands.length} application commands.`);
+} catch (error) {
+    console.error("Failed to register application commands:", error);
+    console.error("Continuing startup without command registration. Existing commands will remain until this is fixed.");
+}
 
 // Create bot
 const client = new Client({
