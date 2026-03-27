@@ -483,6 +483,10 @@ function getOpenApplicationSession(userId) {
 
 async function sendApplicationQuestionDm(user, app, index) {
     const question = APPLICATION_QUESTIONS[index];
+    if (!question) {
+        throw new Error(`Invalid question index: ${index} (total: ${APPLICATION_QUESTIONS.length})`);
+    }
+
     const embed = new EmbedBuilder()
         .setColor("#4ea8de")
         .setTitle(app.departmentName)
@@ -6591,7 +6595,12 @@ client.on("messageCreate", async message => {
     }
 
     saveApplications();
-    await sendApplicationQuestionDm(message.author, app, session.currentQuestionIndex).catch(() => {});
+    try {
+        await sendApplicationQuestionDm(message.author, app, session.currentQuestionIndex);
+    } catch (err) {
+        console.error("[Applications] Failed to send next question DM:", err.message);
+        await message.channel.send(`⚠️ Error sending next question: ${err.message}. Please try again or contact staff.`).catch(() => {});
+    }
 });
     const command = commandMatch ? commandMatch[1] : "";
 
