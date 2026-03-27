@@ -1733,7 +1733,7 @@ try {
     const quickGuildIds = Array.from(new Set([
         GUILD_ID,
         "1482203107432595601", // HCSO
-        "1318018654515888138"  // Main server
+        "1300239835293814925"  // Main server (temporary test)
     ].filter(Boolean)));
 
     if (quickGuildIds.length === 0) {
