@@ -170,6 +170,37 @@ export function startDashboard(context) {
             segmentAccess[segment] = userId ? canAccessSegment(userId, roleIds, segment, GUILD_ID || MAIN_ROLE_GUILD_ID) : false;
         }
 
+        const accessibleDepartmentIds = [];
+        const departmentAccessByGuild = context.config?.departmentAccessByGuild && typeof context.config.departmentAccessByGuild === "object"
+            ? context.config.departmentAccessByGuild
+            : {};
+
+        const departmentEntries = Object.entries(departments)
+            .filter(([, dept]) => dept && dept.type === "department");
+
+        if (userId) {
+            for (const [departmentGuildId] of departmentEntries) {
+                if (BOT_OWNER_IDS.includes(String(userId))) {
+                    accessibleDepartmentIds.push(departmentGuildId);
+                    continue;
+                }
+
+                const allowedRoleIds = Array.isArray(departmentAccessByGuild[departmentGuildId])
+                    ? departmentAccessByGuild[departmentGuildId].map(String).filter(Boolean)
+                    : [];
+
+                if (allowedRoleIds.length === 0) {
+                    accessibleDepartmentIds.push(departmentGuildId);
+                    continue;
+                }
+
+                const viewerRoleIds = await getViewerRoleIds(userId, departmentGuildId);
+                if (allowedRoleIds.some(roleId => viewerRoleIds.includes(roleId))) {
+                    accessibleDepartmentIds.push(departmentGuildId);
+                }
+            }
+        }
+
         res.locals.botName    = branding.botName;
         res.locals.botAvatar  = client.user?.displayAvatarURL({ size: 64 }) || "";
         res.locals.user       = req.session.user  || null;
@@ -178,6 +209,7 @@ export function startDashboard(context) {
         res.locals.branding   = branding;
         res.locals.departments = departments;
         res.locals.servers    = servers;
+        res.locals.accessibleDepartmentIds = accessibleDepartmentIds;
         res.locals.mainServerId = GUILD_ID || null;
         res.locals.segmentAccess = segmentAccess;
         next();
@@ -201,6 +233,7 @@ export function startDashboard(context) {
         requireStaff,
         segmentGuard,
         serverStats,
+        BOT_OWNER_IDS,
         client,
         config:               context.config,
         saveConfig:           context.saveConfig,

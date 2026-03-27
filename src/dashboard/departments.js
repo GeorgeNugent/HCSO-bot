@@ -20,7 +20,7 @@ import { getAllDepartments, getBranding, resolveDepartmentForGuild } from "../em
  *           MAX_STRIKES: number, patrols: Object, loa: Object, casesData: Object, saveCases: Function, saveLOA: Function }} deps
  * @returns {import("express").Router}
  */
-export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats, client, config, saveConfig, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES, patrols, loa, casesData, saveCases, saveLOA }) {
+export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats, BOT_OWNER_IDS = [], client, config, saveConfig, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES, patrols, loa, casesData, saveCases, saveLOA }) {
     const router = Router();
     const HCSO_GUILD_ID = "1482203107432595601";
     const STRIKE_ROLE_IDS = [
@@ -76,6 +76,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
         try {
             const branding    = getBranding();
             const departments = getAllDepartments();
+            const requesterId = req.session.user?.id || "";
 
             const configuredDepartmentEntries = Object.entries(departments)
                 .filter(([, dept]) => dept && dept.type === "department");
@@ -83,6 +84,9 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
             const deptGuilds = [];
             for (const [configuredGuildId, configuredDept] of configuredDepartmentEntries) {
                 const resolvedGuildId = await resolveDashboardGuildId(String(configuredGuildId));
+                const allowed = await canAccessDepartmentByGuildIds(requesterId, configuredGuildId, resolvedGuildId);
+                if (!allowed) continue;
+
                 const guild = await getGuild(resolvedGuildId);
 
                 if (guild) {
@@ -121,7 +125,20 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     });
     router.get("/servers", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
-            const servers      = await serverStats.getAllServers();
+            const requesterId = req.session.user?.id || "";
+            const allServers  = await serverStats.getAllServers();
+            const servers = [];
+
+            for (const server of allServers) {
+                if (server.departmentType !== "department") {
+                    servers.push(server);
+                    continue;
+                }
+
+                const allowed = await canAccessDepartmentByGuildIds(requesterId, server.id);
+                if (allowed) servers.push(server);
+            }
+
             const branding     = getBranding();
             const totalMembers = servers.reduce((s, g) => s + g.memberCount, 0);
 
@@ -142,6 +159,12 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
         try {
             const requestedGuildId = String(req.params.guildId || "");
             const guildId = await resolveDashboardGuildId(requestedGuildId);
+            const requesterId = req.session.user?.id || "";
+            const allowed = await canAccessDepartmentByGuildIds(requesterId, requestedGuildId, guildId);
+            if (!allowed) {
+                return res.render("access-denied", { page: "denied" });
+            }
+
             const branding    = getBranding();
             const detail      = await serverStats.getServerDetail(guildId);
             const dept        = resolveDepartmentForGuild({ id: guildId, name: detail?.name || "" }) ?? null;
@@ -274,6 +297,48 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     async function getGuild(guildId) {
         return client.guilds.cache.get(guildId)
             ?? await client.guilds.fetch(guildId).catch(() => null);
+    }
+
+    async function getRoleIdsForViewerInGuild(userId, guildId) {
+        const guild = await getGuild(guildId);
+        if (!guild) return [];
+
+        const member = await guild.members.fetch(userId).catch(() => null);
+        if (!member) return [];
+
+        return member.roles.cache
+            .filter(r => r.name !== "@everyone")
+            .map(r => String(r.id));
+    }
+
+    async function canAccessDepartmentByGuildIds(userId, ...guildIds) {
+        if (BOT_OWNER_IDS.includes(String(userId))) return true;
+
+        const departmentAccessByGuild = config.departmentAccessByGuild && typeof config.departmentAccessByGuild === "object"
+            ? config.departmentAccessByGuild
+            : {};
+
+        const uniqueGuildIds = [...new Set(guildIds.map(id => String(id || "")).filter(Boolean))];
+        const rolePolicies = uniqueGuildIds
+            .map(guildId => ({
+                guildId,
+                allowedRoleIds: Array.isArray(departmentAccessByGuild[guildId])
+                    ? departmentAccessByGuild[guildId].map(String).filter(Boolean)
+                    : []
+            }))
+            .filter(policy => policy.allowedRoleIds.length > 0);
+
+        // No explicit policy means fallback to standard staff access.
+        if (rolePolicies.length === 0) return true;
+
+        for (const policy of rolePolicies) {
+            const roleIds = await getRoleIdsForViewerInGuild(userId, policy.guildId);
+            if (policy.allowedRoleIds.some(roleId => roleIds.includes(roleId))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     async function resolveDashboardGuildId(requestedGuildId) {

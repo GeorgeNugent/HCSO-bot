@@ -98,9 +98,10 @@
       <% } %>
 
       <% if (!segmentAccess || segmentAccess.departments) { %>
+        <% var visibleDepartmentIds = Array.isArray(accessibleDepartmentIds) ? accessibleDepartmentIds.map(String) : []; %>
         <% var deptServers = Object.entries(typeof departments !== 'undefined' ? departments : {}).filter(function(entry){
              var dept = entry[1] || {};
-             return dept.type === 'department';
+             return dept.type === 'department' && (visibleDepartmentIds.length === 0 || visibleDepartmentIds.includes(String(entry[0])));
            }).map(function(entry){
              return {
                id: entry[0],

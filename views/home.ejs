@@ -97,7 +97,8 @@
   <h3 class="section-title">🏛️ Departments</h3>
   <div class="quick-grid">
     <a href="/servers" class="quick-btn">🌐 All Servers</a>
-    <% Object.entries(departments).filter(function(entry){ return (entry[1] || {}).type === 'department'; }).forEach(function(entry){ var gId = entry[0]; var dept = entry[1]; %>
+    <% var visibleDepartmentIds = Array.isArray(accessibleDepartmentIds) ? accessibleDepartmentIds.map(String) : []; %>
+    <% Object.entries(departments).filter(function(entry){ return (entry[1] || {}).type === 'department' && (visibleDepartmentIds.length === 0 || visibleDepartmentIds.includes(String(entry[0]))); }).forEach(function(entry){ var gId = entry[0]; var dept = entry[1]; %>
       <a href="/departments/<%= gId %>" class="quick-btn" style="border-color:<%= dept.color %>44;">
         <%= dept.shortName || dept.name %>
       </a>
