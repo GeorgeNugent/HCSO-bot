@@ -174,7 +174,7 @@ export function startDashboard(context) {
         MAX_STRIKES:          context.MAX_STRIKES,
         patrols:              context.patrols,
         loa:                  context.loa,
-        casesData:            context.casesData
+        casesData:            context.casesData,
         saveCases:            context.saveCases,
         saveLOA:              context.saveLOA
     }));

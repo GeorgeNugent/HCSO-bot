@@ -438,14 +438,12 @@
     var body = { userId: currentUserId };
     var reasonEl  = document.getElementById('mReason');
     var minutesEl = document.getElementById('mMinutes');
+    var amountEl  = document.getElementById('mAmount');
     if (reasonEl)  body.reason  = reasonEl.value.trim();
     if (minutesEl) body.minutes = minutesEl.value;
+    if (amountEl)  body.amount  = amountEl.value;
 
     if (!body.reason && cfg.fields.includes('reason')) {
-      var amountEl = document.getElementById('mAmount');
-      if (amountEl)  body.amount  = amountEl.value;
-
-      if (!body.reason && cfg.fields.includes('reason')) {
       showModalResult('error', 'Please enter a reason.');
       return;
     }
