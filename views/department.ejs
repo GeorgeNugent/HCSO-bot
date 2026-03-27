@@ -89,7 +89,14 @@
   <div class="card-body" style="padding-top:12px;">
     <input type="text" id="memberSearch" class="member-search" placeholder="🔍  Search members…" oninput="filterMembers()">
     <% if (members.length === 0) { %>
-      <p style="color:var(--text-muted);padding:12px 0;">No members loaded. Bot may not have the Members intent for this server.</p>
+      <p style="color:var(--text-muted);padding:12px 0;">
+        No members loaded.
+        <% if (memberLoadError) { %>
+          Error: <%= memberLoadError %>
+        <% } else { %>
+          Bot may not have access to fetch members for this server.
+        <% } %>
+      </p>
     <% } else { %>
     <div style="overflow-x:auto;">
       <table class="table" id="memberTable">

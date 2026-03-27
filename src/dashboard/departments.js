@@ -102,10 +102,26 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
             // Fetch member list for this guild
             const guild = client.guilds.cache.get(guildId);
             let members = [];
+            let memberLoadError = "";
             if (guild) {
                 try {
-                    await guild.members.fetch();
-                    members = [...guild.members.cache.values()]
+                    // Prefer the fetch() return value instead of relying on cache.
+                    let fetched = await guild.members.fetch().catch((err) => {
+                        memberLoadError = err?.message || "Member fetch failed";
+                        return null;
+                    });
+
+                    let memberList = fetched ? [...fetched.values()] : [...guild.members.cache.values()];
+
+                    // Fallback path for hosts that keep cache very small.
+                    if (memberList.length <= 1) {
+                        const listed = await guild.members.list({ limit: 1000 }).catch(() => null);
+                        if (listed && listed.size > memberList.length) {
+                            memberList = [...listed.values()];
+                        }
+                    }
+
+                    members = memberList
                         .filter(m => !m.user.bot)
                         .map(m => {
                             const userStrikes = getUserStrikeEntries ? getUserStrikeEntries(guildId, m.id) : [];
@@ -128,6 +144,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
                         .sort((a, b) => a.name.localeCompare(b.name));
                 } catch (e) {
                     console.error("[Dept] Member fetch error:", e.message);
+                    memberLoadError = e?.message || "Member load failed";
                 }
             }
 
@@ -137,6 +154,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
                 dept:       dept ?? branding.fallback,
                 detail,
                 members,
+                memberLoadError,
                 MAX_STRIKES: MAX_STRIKES ?? 3,
                 branding
             });
