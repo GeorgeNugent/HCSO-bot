@@ -67,7 +67,7 @@
               </div>
             </td>
             <td>
-              <span class="badge" style="background:<%= srv.color %>22;color:<%= srv.color %>;border:1px solid <%= srv.color %>44;">
+              <span class="badge dept-badge" data-color="<%= srv.color %>">
                 <%= srv.department %>
               </span>
             </td>
@@ -89,5 +89,14 @@
     <% } %>
   </div>
 </div>
+
+<script>
+  document.querySelectorAll('.dept-badge[data-color]').forEach(function(el) {
+    var c = el.dataset.color;
+    el.style.background = c + '22';
+    el.style.color = c;
+    el.style.border = '1px solid ' + c + '44';
+  });
+</script>
 
 <%- include('partials/footer') %>
