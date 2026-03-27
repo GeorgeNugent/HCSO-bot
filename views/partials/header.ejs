@@ -71,6 +71,14 @@
           <span class="nav-icon">📋</span><span class="nav-label">Logs</span>
         </a>
       <% } %>
+      <% var _mainServersForStaff = (typeof servers !== 'undefined' ? servers : []).filter(function(s){ return (departments[s.id] || {}).type === 'main'; }); %>
+      <% _mainServersForStaff.forEach(function(srv) { %>
+        <a href="/departments/<%= srv.id %>"
+           class="nav-link <%= page === 'department' && typeof guildId !== 'undefined' && guildId === srv.id ? 'active' : '' %>"
+           title="<%= srv.name %>">
+          <span class="nav-icon">🏛️</span><span class="nav-label">Twin Palms Staff</span>
+        </a>
+      <% }); %>
       <% if (!segmentAccess || segmentAccess.applications) { %>
         <a href="/applications" class="nav-link <%= page === 'applications' ? 'active' : '' %>">
           <span class="nav-icon">📝</span><span class="nav-label">Applications</span>
@@ -90,17 +98,6 @@
       <% if (!segmentAccess || segmentAccess.departments) { %>
         <% var mainServers = (typeof servers !== 'undefined' ? servers : []).filter(function(s){ return (departments[s.id] || {}).type === 'main'; }); %>
         <% var deptServers = (typeof servers !== 'undefined' ? servers : []).filter(function(s){ return (departments[s.id] || {}).type !== 'main'; }); %>
-        <% if (mainServers.length > 0) { %>
-          <div class="sidebar-section-label" style="margin-top:8px;">Main Server</div>
-          <% mainServers.forEach(function(srv) { %>
-            <a href="/departments/<%= srv.id %>"
-               class="nav-link <%= page === 'department' && typeof guildId !== 'undefined' && guildId === srv.id ? 'active' : '' %>"
-               title="<%= srv.name %>">
-              <span class="nav-icon">🏘️</span>
-              <span class="nav-label" style="font-size:12px;"><%= srv.shortName || srv.department %></span>
-            </a>
-          <% }); %>
-        <% } %>
         <div class="sidebar-section-label" style="margin-top:8px;">Law Enforcement</div>
         <a href="/departments/joint" class="nav-link <%= page === 'joint' ? 'active' : '' %>">
           <span class="nav-icon">🤝</span><span class="nav-label">Joint Ops</span>
