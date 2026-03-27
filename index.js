@@ -5460,17 +5460,20 @@ client.on("messageCreate", async message => {
 client.on("messageCreate", async message => {
     if (message.author.bot) return;
     if (!message.guild) return;
-    if (!message.content.startsWith(">")) return;
+    const normalized = message.content.trim().toLowerCase();
+    if (!normalized.startsWith(">")) return;
 
-    const args = message.content.slice(1).trim().split(/ +/);
-    const command = args.shift().toLowerCase();
+    const args = normalized.slice(1).trim().split(/ +/);
+    const command = args.shift();
 
     if (command === "onlinedash") {
         try {
             const webUrl = process.env.DASHBOARD_URL || "http://45.143.198.46:8100";
-            await message.channel.send(`🌐 **Web Dashboard:** ${webUrl}`);
+            await message.channel.send({ content: `Web Dashboard: ${webUrl}` });
+            console.log(`onlinedash sent in guild ${message.guild.id}, channel ${message.channelId}`);
         } catch (error) {
             console.error("onlinedash prefix command error:", error);
+            await message.author.send(`Web Dashboard: ${process.env.DASHBOARD_URL || "http://45.143.198.46:8100"}`).catch(() => {});
         }
         return;
     }
