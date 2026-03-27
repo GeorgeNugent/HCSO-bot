@@ -1316,7 +1316,11 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("dashboard")
-        .setDescription("Open the Twin Palms Roleplay Control Panel (staff only)")
+        .setDescription("Open the Twin Palms Roleplay Control Panel (staff only)"),
+
+    new SlashCommandBuilder()
+        .setName("onelinedash")
+        .setDescription("Post the web dashboard link in chat")
 
 ].map(c => c.toJSON());
 
@@ -5114,6 +5118,13 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
     }
 
     // /dashboard command
+    if (interaction.commandName === "onelinedash") {
+        const webUrl = process.env.DASHBOARD_URL || "http://45.143.198.46:8100";
+        return interaction.reply({
+            content: `🌐 **Web Dashboard:** ${webUrl}`
+        });
+    }
+
     if (interaction.commandName === "dashboard") {
         try {
             // Check if user has access to dashboard
