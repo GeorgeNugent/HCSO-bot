@@ -211,10 +211,14 @@
 </div>
 
 <!-- Tab bar -->
+<%
+  var deptCode = String(dept.shortName || '').toUpperCase();
+  var useCommandTabNames = ['HCSO', 'CPD', 'FHP'].includes(deptCode);
+%>
 <div class="tab-bar dept-tabs">
-  <button class="tab-btn active" data-dtab="dtab-members">👥 Members</button>
+  <button class="tab-btn active" data-dtab="dtab-members"><%= useCommandTabNames ? '🔨 Moderation' : '👥 Members' %></button>
   <button class="tab-btn" data-dtab="dtab-cases">📋 Cases</button>
-  <button class="tab-btn" data-dtab="dtab-loa">🌴 LOA Manager</button>
+  <button class="tab-btn" data-dtab="dtab-loa"><%= useCommandTabNames ? '🌴 Staff Mgmt' : '🌴 LOA Manager' %></button>
   <button class="tab-btn" data-dtab="dtab-logs">🧾 View Logs</button>
 </div>
 
@@ -222,7 +226,7 @@
 <div id="dtab-members" class="tab-panel active">
   <div class="card">
     <div class="card-header">
-      <h3 class="card-title">👥 Members</h3>
+      <h3 class="card-title"><%= useCommandTabNames ? '🔨 Moderation' : '👥 Members' %></h3>
     </div>
     <div class="card-body" style="padding-top:12px;">
       <input type="text" id="memberSearch" class="member-search" placeholder="🔍  Search members…" oninput="filterMembers()">
@@ -386,7 +390,7 @@
 <!-- ─── LOA Manager tab panel ─────────────────────────────────────────────── -->
 <div id="dtab-loa" class="tab-panel">
   <div class="card" style="margin-bottom:16px;">
-    <div class="card-header"><h3 class="card-title">🌴 Currently On LOA (<%= (usersOnLoa||[]).length %>)</h3></div>
+    <div class="card-header"><h3 class="card-title"><%= useCommandTabNames ? '🌴 Staff Mgmt — Current LOA' : '🌴 Currently On LOA' %> (<%= (usersOnLoa||[]).length %>)</h3></div>
     <div class="card-body">
       <% if (!(usersOnLoa||[]).length) { %>
         <p style="color:var(--text-muted);">No members currently on LOA for this department.</p>
