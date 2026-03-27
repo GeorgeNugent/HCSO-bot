@@ -68,13 +68,22 @@
 <div class="section-card" style="margin-top:24px;">
   <h3 class="section-title">Heap Usage</h3>
   <div class="progress-bar-wrap">
-    <div class="progress-bar-fill" id="heap-bar"
-         style="width:<%= Math.min(100, Math.round(heapUsed/heapTotal*100)) %>%"></div>
+    <div
+      class="progress-bar-fill"
+      id="heap-bar"
+      data-initial-pct="<%= Math.min(100, Math.round(heapUsed / heapTotal * 100)) %>">
+    </div>
   </div>
   <p class="progress-label"><%= heapUsed %> MB used of <%= heapTotal %> MB</p>
 </div>
 
 <script>
+  const heapBar = document.getElementById("heap-bar");
+  const initialPct = Number(heapBar?.dataset.initialPct || 0);
+  if (heapBar) {
+    heapBar.style.width = initialPct + "%";
+  }
+
   // Poll live stats every 5 seconds
   setInterval(async () => {
     try {
