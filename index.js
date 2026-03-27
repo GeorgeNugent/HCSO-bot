@@ -1321,6 +1321,7 @@ const commands = [
     new SlashCommandBuilder()
         .setName("onelinedash")
         .setDescription("Post the web dashboard link in chat")
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
 
 ].map(c => c.toJSON());
 
