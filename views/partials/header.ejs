@@ -71,7 +71,11 @@
           <span class="nav-icon">📋</span><span class="nav-label">Logs</span>
         </a>
       <% } %>
-      <% var _mainServersForStaff = (typeof servers !== 'undefined' ? servers : []).filter(function(s){ return (departments[s.id] || {}).type === 'main'; }); %>
+      <% var _resolvedMainServerId = (typeof mainServerId !== 'undefined' && mainServerId) ? String(mainServerId) : ''; %>
+      <% var _mainServersForStaff = (typeof servers !== 'undefined' ? servers : []).filter(function(s){
+           var deptType = (departments[s.id] || {}).type;
+           return deptType === 'main' || (_resolvedMainServerId && String(s.id) === _resolvedMainServerId);
+         }); %>
       <% _mainServersForStaff.forEach(function(srv) { %>
         <a href="/departments/<%= srv.id %>"
            class="nav-link <%= page === 'department' && typeof guildId !== 'undefined' && guildId === srv.id ? 'active' : '' %>"
@@ -96,8 +100,10 @@
       <% } %>
 
       <% if (!segmentAccess || segmentAccess.departments) { %>
-        <% var mainServers = (typeof servers !== 'undefined' ? servers : []).filter(function(s){ return (departments[s.id] || {}).type === 'main'; }); %>
-        <% var deptServers = (typeof servers !== 'undefined' ? servers : []).filter(function(s){ return (departments[s.id] || {}).type !== 'main'; }); %>
+        <% var deptServers = (typeof servers !== 'undefined' ? servers : []).filter(function(s){
+             var deptType = (departments[s.id] || {}).type;
+             return deptType === 'department' && (!_resolvedMainServerId || String(s.id) !== _resolvedMainServerId);
+           }); %>
         <div class="sidebar-section-label" style="margin-top:8px;">Law Enforcement</div>
         <a href="/departments/joint" class="nav-link <%= page === 'joint' ? 'active' : '' %>">
           <span class="nav-icon">🤝</span><span class="nav-label">Joint Ops</span>

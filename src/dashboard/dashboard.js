@@ -144,6 +144,7 @@ export function startDashboard(context) {
         res.locals.branding   = branding;
         res.locals.departments = departments;
         res.locals.servers    = servers;
+        res.locals.mainServerId = GUILD_ID || null;
         res.locals.segmentAccess = segmentAccess;
         next();
     });
