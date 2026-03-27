@@ -74,8 +74,10 @@ export function startDashboard(context) {
         return await client.guilds.fetch(MAIN_ROLE_GUILD_ID).catch(() => null);
     }
 
-    async function getViewerRoleIds(userId) {
-        const guild = await getMainRoleGuild();
+    async function getViewerRoleIds(userId, guildId = MAIN_ROLE_GUILD_ID) {
+        if (!guildId) return [];
+        const guild = client.guilds.cache.get(guildId)
+            || await client.guilds.fetch(guildId).catch(() => null);
         if (!guild) return [];
         const member = await guild.members.fetch(userId).catch(() => null);
         if (!member) return [];
@@ -84,14 +86,19 @@ export function startDashboard(context) {
             .map(r => r.id);
     }
 
-    function getSegmentAccessConfig() {
-        const map = context.config?.dashboardSegmentAccess;
-        return map && typeof map === "object" ? map : {};
+    function getSegmentAccessConfig(guildId = MAIN_ROLE_GUILD_ID) {
+        const byGuild = context.config?.dashboardSegmentAccessByGuild;
+        if (guildId && byGuild && typeof byGuild === "object" && byGuild[guildId] && typeof byGuild[guildId] === "object") {
+            return byGuild[guildId];
+        }
+
+        const legacy = context.config?.dashboardSegmentAccess;
+        return legacy && typeof legacy === "object" ? legacy : {};
     }
 
-    function canAccessSegment(userId, roleIds, segment) {
+    function canAccessSegment(userId, roleIds, segment, guildId = MAIN_ROLE_GUILD_ID) {
         if (userId === BOT_OWNER_ID) return true;
-        const access = getSegmentAccessConfig();
+        const access = getSegmentAccessConfig(guildId);
         const allowedRoles = Array.isArray(access[segment]) ? access[segment] : [];
         if (allowedRoles.length === 0) return true;
         return allowedRoles.some(id => roleIds.includes(id));
@@ -104,10 +111,21 @@ export function startDashboard(context) {
         }
 
         const userId = req.session.user.id;
-        const roleIds = await getViewerRoleIds(userId);
+        const segmentGuildId = String(
+            req.params?.guildId
+            || req.body?.guildId
+            || req.body?.serverId
+            || req.query?.guildId
+            || req.query?.serverId
+            || GUILD_ID
+            || MAIN_ROLE_GUILD_ID
+            || ""
+        );
+        const roleIds = await getViewerRoleIds(userId, segmentGuildId || MAIN_ROLE_GUILD_ID);
         req.viewerRoleIds = roleIds;
+        req.segmentGuildId = segmentGuildId;
 
-        if (canAccessSegment(userId, roleIds, segment)) return next();
+        if (canAccessSegment(userId, roleIds, segment, segmentGuildId || MAIN_ROLE_GUILD_ID)) return next();
 
         if (req.path.startsWith("/api/")) {
             return res.status(403).json({ error: `Access denied for segment: ${segment}` });
@@ -129,11 +147,11 @@ export function startDashboard(context) {
         const departments  = getAllDepartments();
         const servers      = await serverStats.getAllServers().catch(() => []);
         const userId       = req.session.user?.id || null;
-        const roleIds      = userId ? await getViewerRoleIds(userId) : [];
+        const roleIds      = userId ? await getViewerRoleIds(userId, GUILD_ID || MAIN_ROLE_GUILD_ID) : [];
         const segmentAccess = {};
 
         for (const segment of DASHBOARD_SEGMENTS) {
-            segmentAccess[segment] = userId ? canAccessSegment(userId, roleIds, segment) : false;
+            segmentAccess[segment] = userId ? canAccessSegment(userId, roleIds, segment, GUILD_ID || MAIN_ROLE_GUILD_ID) : false;
         }
 
         res.locals.botName    = branding.botName;

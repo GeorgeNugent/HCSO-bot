@@ -339,10 +339,21 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         const mainGuild = await getMainRoleGuild();
         const member = mainGuild && userId ? await mainGuild.members.fetch(userId).catch(() => null) : null;
         const roleNames = member ? member.roles.cache.map(r => String(r.name || "").toLowerCase()) : [];
+        const memberRoleIds = member ? member.roles.cache.map(r => String(r.id)) : [];
         const isAdmin = !!(member && member.permissions.has("Administrator"));
+
+        const appReviewerByGuild = config.applicationReviewerRoleIdsByGuild && typeof config.applicationReviewerRoleIdsByGuild === "object"
+            ? config.applicationReviewerRoleIdsByGuild
+            : {};
+        const configuredAppReviewerRoleIds = mainGuild && Array.isArray(appReviewerByGuild[mainGuild.id])
+            ? appReviewerByGuild[mainGuild.id].map(String)
+            : (Array.isArray(config.applicationReviewerRoleIds) ? config.applicationReviewerRoleIds.map(String) : []);
+        const hasConfiguredAppReviewerRole = configuredAppReviewerRoleIds.length > 0
+            && configuredAppReviewerRoleIds.some(roleId => memberRoleIds.includes(roleId));
 
         const canViewStaffApplications = isBotOwner
             || isAdmin
+            || hasConfiguredAppReviewerRole
             || roleNames.some(name => name.includes("staff") || name.includes("administrator") || name.includes("supervisor"));
 
         let allowedDepartmentGuildIds = [];
@@ -400,23 +411,62 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
 
     async function getBotOwnerAccessViewModel(req) {
         const mainGuild = await getMainRoleGuild();
-        const availableRoles = mainGuild
-            ? mainGuild.roles.cache
+
+        const serverOptions = [...client.guilds.cache.values()]
+            .map(g => ({ id: g.id, name: g.name }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        const availableRolesByGuild = {};
+        for (const server of serverOptions) {
+            const guild = client.guilds.cache.get(server.id) || await client.guilds.fetch(server.id).catch(() => null);
+            if (!guild) {
+                availableRolesByGuild[server.id] = [];
+                continue;
+            }
+
+            try {
+                await guild.roles.fetch().catch(() => null);
+            } catch {
+                // Ignore role fetch failures and fall back to cache.
+            }
+
+            availableRolesByGuild[server.id] = guild.roles.cache
                 .filter(r => r.name !== "@everyone")
                 .map(r => ({ id: r.id, name: r.name }))
-                .sort((a, b) => a.name.localeCompare(b.name))
-            : [];
+                .sort((a, b) => a.name.localeCompare(b.name));
+        }
+
+        const selectedServerId = serverOptions.some(s => s.id === ROLE_SOURCE_GUILD_ID)
+            ? ROLE_SOURCE_GUILD_ID
+            : (serverOptions[0]?.id || ROLE_SOURCE_GUILD_ID);
 
         const dashboardSegmentAccess = config.dashboardSegmentAccess && typeof config.dashboardSegmentAccess === "object"
             ? config.dashboardSegmentAccess
+            : {};
+
+        const dashboardSegmentAccessByGuild = config.dashboardSegmentAccessByGuild && typeof config.dashboardSegmentAccessByGuild === "object"
+            ? config.dashboardSegmentAccessByGuild
+            : {};
+
+        const suggestionReviewerRoleIdsByGuild = config.suggestionReviewerRoleIdsByGuild && typeof config.suggestionReviewerRoleIdsByGuild === "object"
+            ? config.suggestionReviewerRoleIdsByGuild
+            : {};
+
+        const applicationReviewerRoleIdsByGuild = config.applicationReviewerRoleIdsByGuild && typeof config.applicationReviewerRoleIdsByGuild === "object"
+            ? config.applicationReviewerRoleIdsByGuild
             : {};
 
         const suggestionReviewerRoleIds = Array.isArray(config.suggestionReviewerRoleIds)
             ? [...new Set(config.suggestionReviewerRoleIds.map(String).filter(Boolean))]
             : [];
 
+        const applicationReviewerRoleIds = Array.isArray(config.applicationReviewerRoleIds)
+            ? [...new Set(config.applicationReviewerRoleIds.map(String).filter(Boolean))]
+            : [];
+
         return {
-            availableRoles,
+            serverOptions,
+            availableRolesByGuild,
             segmentKeys: DASHBOARD_SEGMENTS,
             isBotOwner: req.session.user?.id === BOT_OWNER_ID,
             botOwnerId: BOT_OWNER_ID,
@@ -424,7 +474,12 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             roleSourceGuildId: ROLE_SOURCE_GUILD_ID,
             roleSourceGuildName: mainGuild?.name || "Hendry County Sheriff's Office",
             dashboardSegmentAccess,
-            suggestionReviewerRoleIds
+            dashboardSegmentAccessByGuild,
+            suggestionReviewerRoleIds,
+            suggestionReviewerRoleIdsByGuild,
+            applicationReviewerRoleIds,
+            applicationReviewerRoleIdsByGuild,
+            selectedServerId
         };
     }
 
@@ -455,15 +510,21 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             page: "bot-owner",
             cfg: {
                 dashboardSegmentAccess: ownerVm.dashboardSegmentAccess,
-                suggestionReviewerRoleIds: ownerVm.suggestionReviewerRoleIds
+                dashboardSegmentAccessByGuild: ownerVm.dashboardSegmentAccessByGuild,
+                suggestionReviewerRoleIds: ownerVm.suggestionReviewerRoleIds,
+                suggestionReviewerRoleIdsByGuild: ownerVm.suggestionReviewerRoleIdsByGuild,
+                applicationReviewerRoleIds: ownerVm.applicationReviewerRoleIds,
+                applicationReviewerRoleIdsByGuild: ownerVm.applicationReviewerRoleIdsByGuild
             },
-            availableRoles: ownerVm.availableRoles,
+            serverOptions: ownerVm.serverOptions,
+            availableRolesByGuild: ownerVm.availableRolesByGuild,
             segmentKeys: ownerVm.segmentKeys,
             isBotOwner: ownerVm.isBotOwner,
             botOwnerId: ownerVm.botOwnerId,
             currentUserId: ownerVm.currentUserId,
             roleSourceGuildId: ownerVm.roleSourceGuildId,
-            roleSourceGuildName: ownerVm.roleSourceGuildName
+            roleSourceGuildName: ownerVm.roleSourceGuildName,
+            selectedServerId: ownerVm.selectedServerId
         });
     });
 
@@ -1358,6 +1419,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
                 return res.status(403).json({ error: "Only the Bot Owner can change segment access." });
             }
 
+            const serverId = String(req.body?.serverId || ROLE_SOURCE_GUILD_ID).trim();
             const incoming = req.body?.segmentAccess;
             if (!incoming || typeof incoming !== "object") {
                 return res.status(400).json({ error: "segmentAccess object is required" });
@@ -1369,7 +1431,17 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
                 normalized[segment] = [...new Set(list.map(String).filter(Boolean))];
             }
 
-            config.dashboardSegmentAccess = normalized;
+            if (!config.dashboardSegmentAccessByGuild || typeof config.dashboardSegmentAccessByGuild !== "object") {
+                config.dashboardSegmentAccessByGuild = {};
+            }
+
+            config.dashboardSegmentAccessByGuild[serverId] = normalized;
+
+            // Keep legacy global setting aligned with the main role source guild.
+            if (serverId === ROLE_SOURCE_GUILD_ID || !config.dashboardSegmentAccess) {
+                config.dashboardSegmentAccess = normalized;
+            }
+
             saveConfig();
             res.json({ success: true });
         } catch (err) {
@@ -1385,12 +1457,54 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
                 return res.status(403).json({ error: "Only the Bot Owner can change suggestion reviewer roles." });
             }
 
+            const serverId = String(req.body?.serverId || ROLE_SOURCE_GUILD_ID).trim();
             const roleIds = Array.isArray(req.body?.roleIds) ? req.body.roleIds : [];
-            config.suggestionReviewerRoleIds = [...new Set(roleIds.map(String).filter(Boolean))];
+            const normalizedRoleIds = [...new Set(roleIds.map(String).filter(Boolean))];
+
+            if (!config.suggestionReviewerRoleIdsByGuild || typeof config.suggestionReviewerRoleIdsByGuild !== "object") {
+                config.suggestionReviewerRoleIdsByGuild = {};
+            }
+
+            config.suggestionReviewerRoleIdsByGuild[serverId] = normalizedRoleIds;
+
+            // Keep legacy global setting aligned with the main role source guild.
+            if (serverId === ROLE_SOURCE_GUILD_ID || !Array.isArray(config.suggestionReviewerRoleIds)) {
+                config.suggestionReviewerRoleIds = normalizedRoleIds;
+            }
+
             saveConfig();
             res.json({ success: true });
         } catch (err) {
             console.error("[Dashboard API] settings/suggestion-reviewers:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Applications reviewer roles (Bot Owner only) ──────────────────
+    router.post("/api/settings/application-reviewers", requireStaff, segmentGuard("settings"), async (req, res) => {
+        try {
+            if (req.session.user?.id !== BOT_OWNER_ID) {
+                return res.status(403).json({ error: "Only the Bot Owner can change application reviewer roles." });
+            }
+
+            const serverId = String(req.body?.serverId || ROLE_SOURCE_GUILD_ID).trim();
+            const roleIds = Array.isArray(req.body?.roleIds) ? req.body.roleIds : [];
+            const normalizedRoleIds = [...new Set(roleIds.map(String).filter(Boolean))];
+
+            if (!config.applicationReviewerRoleIdsByGuild || typeof config.applicationReviewerRoleIdsByGuild !== "object") {
+                config.applicationReviewerRoleIdsByGuild = {};
+            }
+
+            config.applicationReviewerRoleIdsByGuild[serverId] = normalizedRoleIds;
+
+            if (serverId === ROLE_SOURCE_GUILD_ID || !Array.isArray(config.applicationReviewerRoleIds)) {
+                config.applicationReviewerRoleIds = normalizedRoleIds;
+            }
+
+            saveConfig();
+            res.json({ success: true });
+        } catch (err) {
+            console.error("[Dashboard API] settings/application-reviewers:", err.message);
             res.status(500).json({ error: err.message });
         }
     });

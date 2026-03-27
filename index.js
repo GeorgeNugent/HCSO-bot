@@ -196,6 +196,15 @@ if (!config.blacklistJoinAction) {
 if (!Array.isArray(config.suggestionReviewerRoleIds)) {
     config.suggestionReviewerRoleIds = [];
 }
+if (!config.suggestionReviewerRoleIdsByGuild || typeof config.suggestionReviewerRoleIdsByGuild !== "object") {
+    config.suggestionReviewerRoleIdsByGuild = {};
+}
+if (!Array.isArray(config.applicationReviewerRoleIds)) {
+    config.applicationReviewerRoleIds = [];
+}
+if (!config.applicationReviewerRoleIdsByGuild || typeof config.applicationReviewerRoleIdsByGuild !== "object") {
+    config.applicationReviewerRoleIdsByGuild = {};
+}
 
 function saveStrikes() {
     writeJsonData("strikes.json", strikes);
@@ -368,9 +377,14 @@ function canReviewSuggestions(member) {
     if (member.id === "967375704486449222") return true;
     if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
 
-    const configuredRoleIds = Array.isArray(config.suggestionReviewerRoleIds)
-        ? config.suggestionReviewerRoleIds
-        : [];
+    const guildId = member.guild?.id ? String(member.guild.id) : "";
+    const byGuild = config.suggestionReviewerRoleIdsByGuild && typeof config.suggestionReviewerRoleIdsByGuild === "object"
+        ? config.suggestionReviewerRoleIdsByGuild
+        : {};
+
+    const configuredRoleIds = guildId && Array.isArray(byGuild[guildId])
+        ? byGuild[guildId]
+        : (Array.isArray(config.suggestionReviewerRoleIds) ? config.suggestionReviewerRoleIds : []);
 
     if (configuredRoleIds.includes("everyone")) {
         return true;
