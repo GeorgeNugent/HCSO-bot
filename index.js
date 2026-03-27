@@ -1641,6 +1641,16 @@ const commands = [
             { name: "Member Leave Logs", value: "memberleave" }
         )),
 
+    new SlashCommandBuilder()
+        .setName("suggestionschannel")
+        .setDescription("Set the channel where approved suggestions are posted")
+        .addChannelOption(o => o
+            .setName("channel")
+            .setDescription("Channel to post approved suggestions to (defaults to current channel)")
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(false)
+        ),
+
     ...ticketCommands,
 
     new SlashCommandBuilder()
@@ -2060,6 +2070,18 @@ client.on("interactionCreate", async interaction => {
                 if (suggestionUser) {
                     const decisionWord = isApprove ? "accepted" : "denied";
                     await suggestionUser.send(`Your suggestion **${suggestion.title}** was ${decisionWord} by <@${interaction.user.id}>.`).catch(() => {});
+                }
+
+                if (isApprove) {
+                    const finalSuggestionChannelId = getLogChannelId(interaction.guildId, "suggestions");
+                    if (finalSuggestionChannelId) {
+                        const finalSuggestionChannel = await client.channels.fetch(finalSuggestionChannelId).catch(() => null);
+                        if (finalSuggestionChannel && finalSuggestionChannel.isTextBased()) {
+                            const finalEmbed = buildSuggestionEmbed(suggestion)
+                                .setTitle(`✅ Final Suggestion • ${suggestion.title}`);
+                            await finalSuggestionChannel.send({ embeds: [finalEmbed] }).catch(() => {});
+                        }
+                    }
                 }
 
                 return;
@@ -5453,6 +5475,53 @@ client.on("interactionCreate", async interaction => {
                 .setTimestamp();
 
             await safeInteractionErrorReply(interaction, `❌ Logging Configuration Failed\n${error.message || "Unknown error"}`);
+        }
+    }
+
+    // /suggestionschannel
+    if (interaction.commandName === "suggestionschannel") {
+        try {
+            if (!interaction.guildId) {
+                return interaction.reply({
+                    content: "❌ This command can only be used in a server.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+                return interaction.reply({
+                    content: "❌ You do not have permission to configure suggestion channels.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const selectedChannel = interaction.options.getChannel("channel") || interaction.channel;
+            if (!selectedChannel || selectedChannel.type !== ChannelType.GuildText) {
+                return interaction.reply({
+                    content: "❌ Please provide a valid text channel.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            setLogChannelId(interaction.guildId, "suggestions", selectedChannel.id);
+            saveConfig();
+
+            const embed = new EmbedBuilder()
+                .setColor("#2d5a3d")
+                .setTitle("✅ Suggestions Channel Updated")
+                .addFields(
+                    { name: "Final Suggestions Channel", value: `<#${selectedChannel.id}>`, inline: true },
+                    { name: "Updated By", value: `<@${interaction.user.id}>`, inline: true }
+                )
+                .setTimestamp();
+
+            return interaction.reply({ embeds: [embed] });
+        } catch (error) {
+            console.error("suggestionschannel command error:", error);
+            return interaction.reply({
+                content: `❌ Failed to set suggestions channel: ${error.message}`,
+                flags: MessageFlags.Ephemeral
+            }).catch(() => {});
         }
     }
 
