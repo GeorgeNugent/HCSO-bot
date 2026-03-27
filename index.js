@@ -106,6 +106,7 @@ if (!config.moduleRoleAccess) {
         patrol: [],
         cases: [],
         ia: [],
+        loa: [],
         tickets: [],
         moderation: [],
         training: [],
@@ -115,6 +116,9 @@ if (!config.moduleRoleAccess) {
         supervisor: [],
         botOwner: []
     };
+}
+if (!config.moduleRoleAccess.loa) {
+    config.moduleRoleAccess.loa = [];
 }
 if (!config.moduleRoleAccess.botOwner) {
     config.moduleRoleAccess.botOwner = [];
@@ -196,6 +200,7 @@ const TRAINING_CERTIFICATION_ROLES = {
 };
 const TRAINING_CERTIFICATION_ROLE_IDS = Object.values(TRAINING_CERTIFICATION_ROLES);
 const TRAINING_NO_CERT_ROLE_ID = "1482203107956883574";
+const LOA_ROLE_ID = "1482203107806150668";
 
 function getGuildStrikeStore(guildId) {
     if (!guildId) return null;
@@ -1005,6 +1010,55 @@ async function safeInteractionErrorReply(interaction, message) {
     }
 }
 
+function buildLoaReviewComponents(userId) {
+    return [
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`loa_review_accept_${userId}`)
+                .setLabel("Accept")
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId(`loa_review_deny_${userId}`)
+                .setLabel("Deny")
+                .setStyle(ButtonStyle.Danger)
+        )
+    ];
+}
+
+async function setLoaRole(member, enabled) {
+    if (!member || !member.guild) return;
+    const loaRole = await member.guild.roles.fetch(LOA_ROLE_ID).catch(() => null);
+    if (!loaRole) return;
+    if (enabled) {
+        await member.roles.add(loaRole).catch(() => {});
+    } else {
+        await member.roles.remove(loaRole).catch(() => {});
+    }
+}
+
+async function sendLoaReviewLog(guildId, { userId, startDate, endDate, reason, requestedById }) {
+    const loaLogChannelId = getLogChannelId(guildId, "loa");
+    if (!loaLogChannelId) return;
+
+    const loaLogChannel = client.channels.cache.get(loaLogChannelId) || await client.channels.fetch(loaLogChannelId).catch(() => null);
+    if (!loaLogChannel || !loaLogChannel.isTextBased()) return;
+
+    const logEmbed = new EmbedBuilder()
+        .setColor("#f0ad4e")
+        .setTitle("🌴 LOA Request Pending Review")
+        .setDescription("Command Team: review this request and click Accept or Deny.")
+        .addFields(
+            { name: "Deputy", value: `<@${userId}>`, inline: false },
+            { name: "Start Date", value: startDate, inline: true },
+            { name: "End Date", value: endDate, inline: true },
+            { name: "Reason", value: reason || "No reason provided", inline: false },
+            { name: "Requested By", value: `<@${requestedById}>`, inline: true }
+        )
+        .setTimestamp();
+
+    await loaLogChannel.send({ embeds: [logEmbed], components: buildLoaReviewComponents(userId) }).catch(() => {});
+}
+
 // Dashboard permission functions
 function canAccessDashboard(member) {
     const botOwnerId = "967375704486449222";
@@ -1043,6 +1097,7 @@ function canAccessModule(member, moduleType) {
         patrol: () => true,
         cases: () => isAdmin || hasRole("detective"),
         ia: () => isAdmin || hasRole("ia") || hasRole("investigator"),
+        loa: () => isAdmin || hasRole("supervisor") || hasRole("command"),
         tickets: () => isAdmin || hasRole("staff"),
         moderation: () => isAdmin || hasRole("moderator"),
         training: () => isAdmin || hasRole("training"),
@@ -1079,6 +1134,7 @@ function buildDashboardComponents(member) {
         { id: "patrol",     label: "Patrol",          emoji: "🚔", style: ButtonStyle.Primary },
         { id: "cases",      label: "Cases",           emoji: "📋", style: ButtonStyle.Primary },
         { id: "ia",         label: "IA",              emoji: "⚖️", style: ButtonStyle.Primary },
+        { id: "loa",        label: "LOA Manager",     emoji: "🌴", style: ButtonStyle.Primary },
         { id: "tickets",    label: "Tickets",         emoji: "🎫", style: ButtonStyle.Primary },
         { id: "moderation", label: "Moderation",      emoji: "🔨", style: ButtonStyle.Primary },
         { id: "training",   label: "Training",        emoji: "📚", style: ButtonStyle.Primary },
@@ -1544,14 +1600,6 @@ client.on("interactionCreate", async interaction => {
             if (interaction.customId === "start_patrol") {
                 const deputyId = interaction.user.id;
 
-                // Check if user is on LOA
-                if (loa[deputyId] && loa[deputyId].onLOA) {
-                    return interaction.reply({
-                        content: "❌ You are currently on an approved LOA and cannot begin patrol until your LOA has ended.",
-                        flags: MessageFlags.Ephemeral
-                    });
-                }
-
                 if (patrols[deputyId] && patrols[deputyId].active) {
                     return interaction.reply({
                         content: "❌ You're already on patrol!",
@@ -1614,29 +1662,131 @@ client.on("interactionCreate", async interaction => {
                     )
                     .setTimestamp();
 
-const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
-            if (patrolLogChannel) {
-                await patrolLogChannel.send({ embeds: [logEmbed] });
-                }
+                const activeLoa = loa[deputyId] && loa[deputyId].onLOA;
 
-                // Store completed patrol
-                if (!patrols[deputyId].completed) {
-                    patrols[deputyId].completed = [];
+                if (!activeLoa) {
+                    const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
+                    if (patrolLogChannel) {
+                        await patrolLogChannel.send({ embeds: [logEmbed] });
+                    }
+
+                    // Store completed patrol
+                    if (!patrols[deputyId].completed) {
+                        patrols[deputyId].completed = [];
+                    }
+                    patrols[deputyId].completed.push({
+                        startTime: startTime,
+                        endTime: endTime,
+                        duration: duration,
+                        date: new Date(startTime).toDateString()
+                    });
                 }
-                patrols[deputyId].completed.push({
-                    startTime: startTime,
-                    endTime: endTime,
-                    duration: duration,
-                    date: new Date(startTime).toDateString()
-                });
 
                 patrols[deputyId].active = false;
                 savePatrols();
 
                 return interaction.reply({
-                    content: `✅ Patrol ended. Logged ${hours}h ${minutes}m to patrol logs.`,
+                    content: activeLoa
+                        ? "✅ Patrol ended. You are currently on LOA, so this shift was not logged."
+                        : `✅ Patrol ended. Logged ${hours}h ${minutes}m to patrol logs.`,
                     flags: MessageFlags.Ephemeral
                 });
+            }
+
+            if (interaction.customId.startsWith("loa_review_")) {
+                const canReviewLoa = canAccessModule(interaction.member, "loa") || canAccessModule(interaction.member, "supervisor");
+                if (!canReviewLoa) {
+                    return interaction.reply({
+                        content: "❌ You do not have permission to review LOA requests.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                const parts = interaction.customId.split("_");
+                const action = parts[2];
+                const targetUserId = parts[3];
+                const request = loa[targetUserId];
+
+                if (!request || !request.pending) {
+                    return interaction.reply({
+                        content: "⚠️ This LOA request is no longer pending.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                const guild = interaction.guild;
+                const targetMember = guild ? await guild.members.fetch(targetUserId).catch(() => null) : null;
+                const targetUser = targetMember?.user || await client.users.fetch(targetUserId).catch(() => null);
+
+                if (action === "accept") {
+                    request.pending = false;
+                    request.onLOA = true;
+                    request.status = "approved";
+                    request.reviewedBy = interaction.user.id;
+                    request.reviewedAt = new Date().toISOString();
+                    saveLOA();
+
+                    if (targetMember) {
+                        await setLoaRole(targetMember, true);
+                    }
+
+                    if (targetUser) {
+                        await targetUser.send("✅ Your LOA request has been accepted. You are currently on LOA, you do not have to go on shift, but if you do you will still be on LOA so it will not be logged.").catch(() => {});
+                    }
+
+                    const reviewedEmbed = new EmbedBuilder()
+                        .setColor("#2d5a3d")
+                        .setTitle("✅ LOA Request Accepted")
+                        .addFields(
+                            { name: "Deputy", value: `<@${targetUserId}>`, inline: false },
+                            { name: "Start Date", value: request.startDate || "Unknown", inline: true },
+                            { name: "End Date", value: request.endDate || "Unknown", inline: true },
+                            { name: "Reason", value: request.reason || "No reason provided", inline: false },
+                            { name: "Reviewed By", value: `<@${interaction.user.id}>`, inline: true }
+                        )
+                        .setTimestamp();
+
+                    await interaction.update({ embeds: [reviewedEmbed], components: [] });
+                    return interaction.followUp({
+                        content: `✅ Accepted LOA for <@${targetUserId}> and assigned <@&${LOA_ROLE_ID}>.`,
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                if (action === "deny") {
+                    request.pending = false;
+                    request.onLOA = false;
+                    request.status = "denied";
+                    request.reviewedBy = interaction.user.id;
+                    request.reviewedAt = new Date().toISOString();
+                    saveLOA();
+
+                    if (targetMember) {
+                        await setLoaRole(targetMember, false);
+                    }
+
+                    if (targetUser) {
+                        await targetUser.send("❌ Your LOA request has been denied. If it is important, please put in more content and we will reconsider. Until now you are still required to do the minimum hours.").catch(() => {});
+                    }
+
+                    const reviewedEmbed = new EmbedBuilder()
+                        .setColor("#8b0000")
+                        .setTitle("❌ LOA Request Denied")
+                        .addFields(
+                            { name: "Deputy", value: `<@${targetUserId}>`, inline: false },
+                            { name: "Start Date", value: request.startDate || "Unknown", inline: true },
+                            { name: "End Date", value: request.endDate || "Unknown", inline: true },
+                            { name: "Reason", value: request.reason || "No reason provided", inline: false },
+                            { name: "Reviewed By", value: `<@${interaction.user.id}>`, inline: true }
+                        )
+                        .setTimestamp();
+
+                    await interaction.update({ embeds: [reviewedEmbed], components: [] });
+                    return interaction.followUp({
+                        content: `✅ Denied LOA for <@${targetUserId}>.`,
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
             }
 
             if (await ticketSystem.handleButtonInteraction(interaction)) {
@@ -1707,6 +1857,65 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             }
         } catch (error) {
             console.error("Force end patrol error:", error);
+            return interaction.reply({
+                content: `❌ Error: ${error.message}`,
+                flags: MessageFlags.Ephemeral
+            }).catch(() => {});
+        }
+    }
+
+    // Force End LOA button handler
+    if (interaction.isButton() && interaction.customId.startsWith("force_end_loa_")) {
+        try {
+            if (!canAccessModule(interaction.member, "loa") && !canAccessModule(interaction.member, "supervisor")) {
+                return interaction.reply({
+                    content: "❌ You don't have permission to force end LOA.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const targetUserId = interaction.customId.replace("force_end_loa_", "");
+            const targetEntry = loa[targetUserId];
+
+            if (!targetEntry || !targetEntry.onLOA) {
+                return interaction.reply({
+                    content: "⚠️ That member is not currently on active LOA.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            const targetMember = await interaction.guild.members.fetch(targetUserId).catch(() => null);
+            if (targetMember) {
+                await setLoaRole(targetMember, false);
+            }
+
+            delete loa[targetUserId];
+            saveLOA();
+
+            if (targetMember?.user) {
+                await targetMember.user.send("✅ Your LOA has been ended by Command Team. You are now required to resume normal minimum hours.").catch(() => {});
+            }
+
+            const loaLogChannelId = getLogChannelId(interaction.guildId, "loa");
+            const loaLogChannel = loaLogChannelId ? await client.channels.fetch(loaLogChannelId).catch(() => null) : null;
+            if (loaLogChannel && loaLogChannel.isTextBased()) {
+                const embed = new EmbedBuilder()
+                    .setColor("#f39c12")
+                    .setTitle("🛑 LOA Force Ended")
+                    .addFields(
+                        { name: "Deputy", value: `<@${targetUserId}>`, inline: false },
+                        { name: "Ended By", value: `<@${interaction.user.id}>`, inline: true }
+                    )
+                    .setTimestamp();
+                await loaLogChannel.send({ embeds: [embed] }).catch(() => {});
+            }
+
+            return interaction.reply({
+                content: `✅ LOA force-ended for <@${targetUserId}> and role <@&${LOA_ROLE_ID}> removed.`,
+                flags: MessageFlags.Ephemeral
+            });
+        } catch (error) {
+            console.error("Force end LOA error:", error);
             return interaction.reply({
                 content: `❌ Error: ${error.message}`,
                 flags: MessageFlags.Ephemeral
@@ -2425,6 +2634,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     patrol: "Patrol",
                     cases: "Cases",
                     ia: "IA",
+                    loa: "LOA",
                     tickets: "Tickets",
                     moderation: "Moderation",
                     training: "Training",
@@ -2581,6 +2791,45 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 return interaction.update({
                     embeds: [iaEmbed],
                     components: [row1, row2, row3]
+                });
+            }
+
+            // LOA MODULE
+            if (moduleType === "loa") {
+                const activeLoa = Object.entries(loa)
+                    .filter(([, entry]) => entry && entry.onLOA)
+                    .map(([uid, entry]) => ({ userId: uid, ...entry }));
+
+                const pendingLoa = Object.entries(loa)
+                    .filter(([, entry]) => entry && entry.pending)
+                    .map(([uid, entry]) => ({ userId: uid, ...entry }));
+
+                const loaEmbed = new EmbedBuilder()
+                    .setColor("#2d5a3d")
+                    .setTitle("🌴 LOA Manager")
+                    .setDescription("View active/pending LOAs and force-end active LOA status.")
+                    .addFields(
+                        { name: "Active LOAs", value: `${activeLoa.length}`, inline: true },
+                        { name: "Pending Requests", value: `${pendingLoa.length}`, inline: true },
+                        {
+                            name: "Active (preview)",
+                            value: activeLoa.length
+                                ? activeLoa.slice(0, 8).map(item => `<@${item.userId}> • ${item.startDate} → ${item.endDate}\nReason: ${item.reason || "No reason"}`).join("\n\n")
+                                : "None",
+                            inline: false
+                        }
+                    )
+                    .setTimestamp();
+
+                const row1 = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId("dashboard_loa_refresh").setLabel("Refresh").setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId("dashboard_loa_force_select").setLabel("Force End LOA").setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId("dashboard_back").setLabel("← Back").setStyle(ButtonStyle.Secondary)
+                );
+
+                return interaction.update({
+                    embeds: [loaEmbed],
+                    components: [row1]
                 });
             }
 
@@ -3428,6 +3677,64 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 }
             }
 
+            // LOA MANAGER SUB-BUTTONS
+            if (interaction.customId.startsWith("dashboard_loa_")) {
+                const subAction = interaction.customId.replace("dashboard_loa_", "");
+
+                if (subAction === "refresh") {
+                    const activeLoa = Object.entries(loa)
+                        .filter(([, entry]) => entry && entry.onLOA)
+                        .map(([uid, entry]) => ({ userId: uid, ...entry }));
+                    const pendingLoa = Object.entries(loa)
+                        .filter(([, entry]) => entry && entry.pending)
+                        .map(([uid, entry]) => ({ userId: uid, ...entry }));
+
+                    return interaction.reply({
+                        content: `🌴 Active LOAs: **${activeLoa.length}**\n⏳ Pending LOAs: **${pendingLoa.length}**`,
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                if (subAction === "force_select") {
+                    const activeLoa = Object.entries(loa)
+                        .filter(([, entry]) => entry && entry.onLOA)
+                        .map(([uid, entry]) => ({ userId: uid, ...entry }));
+
+                    if (activeLoa.length === 0) {
+                        return interaction.reply({
+                            content: "✅ No active LOAs to force end.",
+                            flags: MessageFlags.Ephemeral
+                        });
+                    }
+
+                    const rows = [];
+                    for (let i = 0; i < activeLoa.length && i < 20; i += 2) {
+                        const row = new ActionRowBuilder().addComponents(
+                            new ButtonBuilder()
+                                .setCustomId(`force_end_loa_${activeLoa[i].userId}`)
+                                .setLabel(`End LOA: ${activeLoa[i].userId}`)
+                                .setStyle(ButtonStyle.Danger)
+                        );
+
+                        if (i + 1 < activeLoa.length) {
+                            row.addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId(`force_end_loa_${activeLoa[i + 1].userId}`)
+                                    .setLabel(`End LOA: ${activeLoa[i + 1].userId}`)
+                                    .setStyle(ButtonStyle.Danger)
+                            );
+                        }
+                        rows.push(row);
+                    }
+
+                    return interaction.reply({
+                        content: "Select a member to force-end LOA:",
+                        components: rows,
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+            }
+
             // SUPERVISOR SUB-BUTTONS
             if (interaction.customId.startsWith("dashboard_supervisor_")) {
                 const subAction = interaction.customId.replace("dashboard_supervisor_", "");
@@ -3507,6 +3814,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                     { name: "Patrol Module", key: "patrol" },
                     { name: "Cases Module", key: "cases" },
                     { name: "IA Module", key: "ia" },
+                    { name: "LOA Module", key: "loa" },
                     { name: "Tickets Module", key: "tickets" },
                     { name: "Moderation Module", key: "moderation" },
                     { name: "Training Module", key: "training" },
@@ -3527,6 +3835,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                             patrol: "Accessible to: Everyone",
                             cases: "Accessible to: Detectives+",
                             ia: "Accessible to: IA/Investigator+",
+                            loa: "Accessible to: Command Team+",
                             tickets: "Accessible to: Staff+",
                             moderation: "Accessible to: Moderators+",
                             training: "Accessible to: Training Officers+",
@@ -3560,12 +3869,13 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
                 );
 
                 const row2 = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId("dashboard_owner_loa").setLabel("Configure LOA").setStyle(ButtonStyle.Primary),
                     new ButtonBuilder().setCustomId("dashboard_owner_tickets").setLabel("Configure Tickets").setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId("dashboard_owner_moderation").setLabel("Configure Moderation").setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId("dashboard_owner_training").setLabel("Configure Training").setStyle(ButtonStyle.Primary)
+                    new ButtonBuilder().setCustomId("dashboard_owner_moderation").setLabel("Configure Moderation").setStyle(ButtonStyle.Primary)
                 );
 
                 const row3 = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId("dashboard_owner_training").setLabel("Configure Training").setStyle(ButtonStyle.Primary),
                     new ButtonBuilder().setCustomId("dashboard_owner_logs").setLabel("Configure Logs").setStyle(ButtonStyle.Primary),
                     new ButtonBuilder().setCustomId("dashboard_owner_bot").setLabel("Configure Bot").setStyle(ButtonStyle.Primary),
                     new ButtonBuilder().setCustomId("dashboard_owner_analytics").setLabel("Configure Analytics").setStyle(ButtonStyle.Primary)
@@ -3856,37 +4166,36 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
         }
 
-        // Store LOA
+        // Store as pending request (not active until accepted)
         loa[userId] = {
-            onLOA: true,
+            onLOA: false,
+            pending: true,
+            status: "pending",
             startDate: startDate,
             endDate: endDate,
-            reason: reason
+            reason: reason,
+            requestedBy: userId,
+            requestedAt: new Date().toISOString()
         };
         saveLOA();
 
-        // Assign LOA role
-        const loaRole = await interaction.guild.roles.fetch("1300431447655448607").catch(() => null);
-        if (loaRole && interaction.member.manageable) {
-            await interaction.member.roles.add(loaRole).catch(() => {});
-        }
-
         // Send confirmation embed
         const embed = new EmbedBuilder()
-            .setColor("#2d5a3d")
-            .setTitle("✅ Leave of Absence Approved")
+            .setColor("#f0ad4e")
+            .setTitle("⏳ LOA Request Submitted")
             .addFields(
                 { name: "Deputy", value: `<@${userId}>`, inline: false },
                 { name: "Start Date", value: startDate, inline: true },
                 { name: "End Date", value: endDate, inline: true },
-                { name: "Reason", value: reason, inline: false }
+                { name: "Reason", value: reason, inline: false },
+                { name: "Status", value: "Pending Command Team review", inline: false }
             )
             .setTimestamp();
 
         // Try to DM the user
         try {
             await interaction.user.send({
-                content: "Your Leave of Absence has been approved. When you return, use /end-loa to remove your LOA status and resume duty."
+                content: "📩 Command teams are currently looking over your LOA request. You will get a message back saying if it was accepted or denied."
             });
         } catch (err) {
             console.log("Could not DM user");
@@ -3894,21 +4203,14 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
 
         interaction.reply({ embeds: [embed] });
 
-        // Log to LOA channel
-        const loaLogChannel = client.channels.cache.get(config.logChannels.loa);
-        if (loaLogChannel) {
-            const logEmbed = new EmbedBuilder()
-                .setColor("#2d5a3d")
-                .setTitle("📋 Leave of Absence Created")
-                .addFields(
-                    { name: "Deputy", value: `<@${userId}>`, inline: false },
-                    { name: "Start Date", value: startDate, inline: true },
-                    { name: "End Date", value: endDate, inline: true },
-                    { name: "Reason", value: reason, inline: false }
-                )
-                .setTimestamp();
-            loaLogChannel.send({ embeds: [logEmbed] }).catch(() => {});
-        }
+        // Send review request to LOA log channel with Accept/Deny buttons
+        await sendLoaReviewLog(interaction.guildId, {
+            userId,
+            startDate,
+            endDate,
+            reason,
+            requestedById: interaction.user.id
+        });
     }
 
     // /end-loa
@@ -3927,10 +4229,7 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
         }
 
         // Remove LOA role
-        const loaRole = await interaction.guild.roles.fetch("1300431447655448607").catch(() => null);
-        if (loaRole && interaction.member.manageable) {
-            await interaction.member.roles.remove(loaRole).catch(() => {});
-        }
+        await setLoaRole(interaction.member, false);
 
         // Clear LOA status
         delete loa[userId];
