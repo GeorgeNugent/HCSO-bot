@@ -94,12 +94,13 @@
 </div>
 
 <!-- Bot Owner Segment Access -->
-<div class="section-card" style="margin-top:20px;">
+<div class="section-card" id="bot-owner-access" style="margin-top:20px;">
   <h3 class="section-title">Bot Owner: Dashboard Segment Access</h3>
-  <p class="section-desc">Assign role IDs from main server <code>1318018654515888138</code>. If a segment has no roles selected, it stays open to all staff. Bot Owner always has full access.</p>
+  <p class="section-desc">Assign role IDs from role source server <code><%= roleSourceGuildId %></code>. If a segment has no roles selected, it stays open to all staff. Bot Owner always has full access.</p>
+  <p class="section-desc">Signed in as: <code><%= currentUserId || 'unknown' %></code> | Bot Owner ID: <code><%= botOwnerId %></code></p>
 
   <% if (!isBotOwner) { %>
-    <div class="alert alert-danger">Only Bot Owner (<code><%= botOwnerId %></code>) can edit this section.</div>
+    <div class="alert alert-danger">Only Bot Owner can edit this section. You are not logged in as the owner account yet.</div>
   <% } %>
 
   <table class="log-table" style="margin-top:10px;">

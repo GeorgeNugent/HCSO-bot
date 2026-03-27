@@ -158,7 +158,8 @@ export function startDashboard(context) {
         segmentGuard,
         canAccessSegment,
         BOT_OWNER_ID,
-        DASHBOARD_SEGMENTS
+        DASHBOARD_SEGMENTS,
+        ROLE_SOURCE_GUILD_ID: MAIN_ROLE_GUILD_ID
     }));
     app.use(createDepartmentRoutes({
         requireStaff,

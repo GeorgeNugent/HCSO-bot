@@ -16,9 +16,10 @@ import { getBranding } from "../embeds/departmentThemes.js";
  * @param {Function} helpers.segmentGuard
  * @param {string[]} helpers.DASHBOARD_SEGMENTS
  * @param {string} helpers.BOT_OWNER_ID
+ * @param {string} helpers.ROLE_SOURCE_GUILD_ID
  * @returns {import("express").Router}
  */
-export function createMainRoutes(context, { requireAuth, requireStaff, getDashboardGuild, getMainRoleGuild, segmentGuard, DASHBOARD_SEGMENTS, BOT_OWNER_ID }) {
+export function createMainRoutes(context, { requireAuth, requireStaff, getDashboardGuild, getMainRoleGuild, segmentGuard, DASHBOARD_SEGMENTS, BOT_OWNER_ID, ROLE_SOURCE_GUILD_ID }) {
     const {
         client,
         strikes,
@@ -268,7 +269,9 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             availableRoles,
             segmentKeys: DASHBOARD_SEGMENTS,
             isBotOwner: req.session.user?.id === BOT_OWNER_ID,
-            botOwnerId: BOT_OWNER_ID
+            botOwnerId: BOT_OWNER_ID,
+            currentUserId: req.session.user?.id || null,
+            roleSourceGuildId: ROLE_SOURCE_GUILD_ID
         });
     });
 
