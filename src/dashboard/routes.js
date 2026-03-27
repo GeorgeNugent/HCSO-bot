@@ -1455,8 +1455,8 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             // Keep the three law-enforcement department dashboards in sync.
             const linkedDepartmentServerIds = [
                 "1482203107432595601", // HCSO
-                "1487191580279443539", // CPD
-                "1487191833204228187"  // FHP
+                "1482501585803415572", // CPD
+                "1482498655523962892"  // FHP
             ];
             if (linkedDepartmentServerIds.includes(serverId)) {
                 for (const linkedServerId of linkedDepartmentServerIds) {

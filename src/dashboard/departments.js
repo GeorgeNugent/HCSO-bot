@@ -227,7 +227,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
                 });
 
             const isLawEnforcementDepartment = ["HCSO", "CPD", "FHP"].includes(String(dept?.shortName || "").toUpperCase())
-                || ["1482203107432595601", "1487191580279443539", "1487191833204228187"].includes(String(guildId));
+                || ["1482203107432595601", "1482501585803415572", "1482498655523962892"].includes(String(guildId));
             let canManageEndLoa = true;
             if (isLawEnforcementDepartment) {
                 const requesterId = req.session.user?.id || null;

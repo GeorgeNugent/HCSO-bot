@@ -1752,8 +1752,8 @@ try {
     const quickGuildIds = Array.from(new Set([
         GUILD_ID,
         "1482203107432595601", // HCSO
-        "1487191580279443539", // CPD
-        "1487191833204228187", // FHP
+        "1482501585803415572", // CPD
+        "1482498655523962892", // FHP
         "1300239835293814925"  // Main server
     ].filter(Boolean)));
 
