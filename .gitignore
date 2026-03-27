@@ -1,2 +1,15 @@
 node_modules/
 .env
+
+# Runtime data files — modified by the bot at runtime, never tracked by git
+config.json
+blacklists.json
+cases.json
+commendations.json
+loa.json
+notes.json
+patrols.json
+reports.json
+strikes.json
+tickets.json
+transcripts/
