@@ -6555,15 +6555,6 @@ client.on("messageCreate", async message => {
     }
 });
 
-// Handle prefix commands
-client.on("messageCreate", async message => {
-    if (message.author.bot) return;
-    if (!message.guild) return;
-    const normalized = message.content.trim().toLowerCase();
-    if (!normalized.startsWith(">")) return;
-
-    const commandMatch = normalized.match(/^>\s*([a-z0-9_-]+)/);
-
 // Handle DM application interview answers
 client.on("messageCreate", async message => {
     if (message.author.bot) return;
@@ -6611,7 +6602,6 @@ client.on("messageCreate", async message => {
         app.submittedAt = new Date().toISOString();
         delete applicationsData.activeSessions[message.author.id];
         saveApplications();
-
         await message.channel.send("✅ Application submitted. Staff and command can now review it from the online dashboard.").catch(() => {});
         return;
     }
@@ -6624,6 +6614,15 @@ client.on("messageCreate", async message => {
         await message.channel.send(`⚠️ Error sending next question: ${err.message}. Please try again or contact staff.`).catch(() => {});
     }
 });
+
+// Handle prefix commands
+client.on("messageCreate", async message => {
+    if (message.author.bot) return;
+    if (!message.guild) return;
+    const normalized = message.content.trim().toLowerCase();
+    if (!normalized.startsWith(">")) return;
+
+    const commandMatch = normalized.match(/^>\s*([a-z0-9_-]+)/);
     const command = commandMatch ? commandMatch[1] : "";
 
     // >addrank command
