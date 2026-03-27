@@ -5507,4 +5507,12 @@ startDashboard({
     STRIKE_ROLE_IDS,
 });
 
+// Prefix command: >onlinedash
+client.on("messageCreate", async message => {
+    if (message.author.bot || !message.guild) return;
+    if (message.content.trim().toLowerCase() !== ">onlinedash") return;
+    const webUrl = process.env.DASHBOARD_URL || "http://45.143.198.46:8100";
+    await message.reply(`🌐 **Web Dashboard:** ${webUrl}`);
+});
+
 client.login(TOKEN);
