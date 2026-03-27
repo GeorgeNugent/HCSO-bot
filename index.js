@@ -5466,18 +5466,6 @@ client.on("messageCreate", async message => {
     const commandMatch = normalized.match(/^>\s*([a-z0-9_-]+)/);
     const command = commandMatch ? commandMatch[1] : "";
 
-    if (command === "onlinedash" || command === "dashlink" || command === "dashboardlink") {
-        try {
-            const webUrl = process.env.DASHBOARD_URL || "http://45.143.198.46:8100";
-            await message.channel.send({ content: `Web Dashboard: ${webUrl}` });
-            console.log(`onlinedash sent in guild ${message.guild.id}, channel ${message.channelId}`);
-        } catch (error) {
-            console.error("onlinedash prefix command error:", error);
-            await message.author.send(`Web Dashboard: ${process.env.DASHBOARD_URL || "http://45.143.198.46:8100"}`).catch(() => {});
-        }
-        return;
-    }
-
     // >addrank command
     if (command === "addrank") {
         try {
