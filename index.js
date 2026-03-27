@@ -80,6 +80,7 @@ const casesData = readJsonData("cases.json", { cases: {} });
 const reports = readJsonData("reports.json", {});
 let tickets = readJsonData("tickets.json", { tickets: {} });
 const applicationsData = readJsonData("applications.json", { counter: 0, applications: {}, activeSessions: {} });
+const suggestionsData = readJsonData("suggestions.json", { counter: 0, suggestions: {} });
 
 function isCaseClosed(entry) {
     if (!entry) return false;
@@ -192,6 +193,9 @@ if (!config.ticketCategory) {
 if (!config.blacklistJoinAction) {
     config.blacklistJoinAction = "ban";
 }
+if (!Array.isArray(config.suggestionReviewerRoleIds)) {
+    config.suggestionReviewerRoleIds = [];
+}
 
 function saveStrikes() {
     writeJsonData("strikes.json", strikes);
@@ -221,6 +225,10 @@ function saveApplications() {
     writeJsonData("applications.json", applicationsData);
 }
 
+function saveSuggestions() {
+    writeJsonData("suggestions.json", suggestionsData);
+}
+
 function saveNotes() {
     writeJsonData("notes.json", notesData);
 }
@@ -248,6 +256,7 @@ function save() {
     saveLOA();
     saveCases();
     saveApplications();
+    saveSuggestions();
     saveReports();
     saveTickets();
     saveBlacklists();
@@ -268,6 +277,18 @@ function ensureApplicationsData() {
 }
 
 ensureApplicationsData();
+
+function ensureSuggestionsData() {
+    if (!suggestionsData || typeof suggestionsData !== "object") return;
+    if (!suggestionsData.suggestions || typeof suggestionsData.suggestions !== "object" || Array.isArray(suggestionsData.suggestions)) {
+        suggestionsData.suggestions = {};
+    }
+    if (typeof suggestionsData.counter !== "number" || Number.isNaN(suggestionsData.counter)) {
+        suggestionsData.counter = 0;
+    }
+}
+
+ensureSuggestionsData();
 
 const MAX_STRIKES = 3;
 const LOG_TYPES = ["patrol", "case", "moderation", "strike", "loa", "transcript", "timeout", "ban", "blacklist", "discord", "commendations", "memberjoin", "memberleave"];
@@ -295,6 +316,8 @@ const APPLICATION_START_PREFIX = "app_start_";
 const APPLICATION_CANCEL_PREFIX = "app_cancel_";
 const APPLICATION_REVIEW_ACCEPT_PREFIX = "app_review_accept_";
 const APPLICATION_REVIEW_DENY_PREFIX = "app_review_deny_";
+const SUGGESTION_APPROVE_PREFIX = "suggestion_approve_";
+const SUGGESTION_DENY_PREFIX = "suggestion_deny_";
 
 const APPLICATION_QUESTIONS = [
     "What's your name you will be going by? (First Name Last Initial)",
@@ -332,6 +355,72 @@ function nextApplicationId() {
     ensureApplicationsData();
     applicationsData.counter += 1;
     return `APP-${String(applicationsData.counter).padStart(6, "0")}`;
+}
+
+function nextSuggestionId() {
+    ensureSuggestionsData();
+    suggestionsData.counter += 1;
+    return `SUG-${String(suggestionsData.counter).padStart(6, "0")}`;
+}
+
+function canReviewSuggestions(member) {
+    if (!member) return false;
+    if (member.id === "967375704486449222") return true;
+    if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+
+    const configuredRoleIds = Array.isArray(config.suggestionReviewerRoleIds)
+        ? config.suggestionReviewerRoleIds
+        : [];
+
+    if (configuredRoleIds.includes("everyone")) {
+        return true;
+    }
+
+    if (configuredRoleIds.length > 0) {
+        return member.roles.cache.some(role => configuredRoleIds.includes(role.id));
+    }
+
+    return member.roles.cache.some(role => {
+        const name = String(role.name || "").toLowerCase();
+        return name.includes("staff") || name.includes("admin") || name.includes("supervisor") || name.includes("command");
+    });
+}
+
+function buildSuggestionEmbed(suggestion) {
+    const status = String(suggestion.status || "pending").toLowerCase();
+    const isApproved = status === "approved";
+    const isDenied = status === "denied";
+    const color = isApproved ? "#2d5a3d" : isDenied ? "#8b0000" : "#f0ad4e";
+    const titlePrefix = isApproved ? "✅ Approved Suggestion" : isDenied ? "❌ Denied Suggestion" : "💡 New Suggestion";
+
+    const embed = new EmbedBuilder()
+        .setColor(color)
+        .setTitle(`${titlePrefix} • ${suggestion.title}`)
+        .setDescription(suggestion.description || "No description provided.")
+        .addFields(
+            { name: "Suggested By", value: `<@${suggestion.authorId}> (${suggestion.authorTag || suggestion.authorId})`, inline: false },
+            { name: "Status", value: status.charAt(0).toUpperCase() + status.slice(1), inline: true },
+            { name: "Suggestion ID", value: suggestion.id, inline: true }
+        )
+        .setTimestamp(new Date(suggestion.submittedAt || Date.now()));
+
+    if (suggestion.link) {
+        embed.addFields({ name: "Reference Link", value: suggestion.link, inline: false });
+    }
+
+    if (suggestion.imageUrl) {
+        embed.setImage(suggestion.imageUrl);
+    }
+
+    if (suggestion.reviewedBy) {
+        embed.addFields({ name: "Reviewed By", value: `<@${suggestion.reviewedBy}>`, inline: true });
+    }
+
+    if (suggestion.reviewedAt) {
+        embed.addFields({ name: "Reviewed At", value: `<t:${Math.floor(new Date(suggestion.reviewedAt).getTime() / 1000)}:f>`, inline: true });
+    }
+
+    return embed;
 }
 
 function buildApplicationRecord(user, selectionValue) {
@@ -1583,6 +1672,18 @@ const commands = [
         .setDescription("Post the application panel for recruits"),
 
     new SlashCommandBuilder()
+        .setName("suggestion")
+        .setDescription("Submit a server suggestion")
+        .addSubcommand(sub =>
+            sub.setName("submit")
+                .setDescription("Submit a suggestion for review")
+                .addStringOption(o => o.setName("title").setDescription("Short suggestion title").setRequired(true))
+                .addStringOption(o => o.setName("description").setDescription("Suggestion details").setRequired(true))
+                .addStringOption(o => o.setName("link").setDescription("Optional reference link").setRequired(false))
+                .addStringOption(o => o.setName("image").setDescription("Optional image URL").setRequired(false))
+        ),
+
+    new SlashCommandBuilder()
         .setName("onlinedash")
         .setDescription("Post the web dashboard link in chat")
 
@@ -1903,6 +2004,65 @@ client.on("interactionCreate", async interaction => {
                     .setTimestamp();
 
                 return interaction.update({ embeds: [acceptedEmbed], components: [] });
+            }
+
+            if (interaction.customId.startsWith(SUGGESTION_APPROVE_PREFIX) || interaction.customId.startsWith(SUGGESTION_DENY_PREFIX)) {
+                if (!canReviewSuggestions(interaction.member)) {
+                    return interaction.reply({
+                        content: "❌ You do not have permission to review suggestions.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                const isApprove = interaction.customId.startsWith(SUGGESTION_APPROVE_PREFIX);
+                const suggestionId = interaction.customId.replace(
+                    isApprove ? SUGGESTION_APPROVE_PREFIX : SUGGESTION_DENY_PREFIX,
+                    ""
+                );
+
+                const suggestion = suggestionsData.suggestions[suggestionId];
+                if (!suggestion) {
+                    return interaction.reply({
+                        content: "❌ Suggestion not found.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                if (suggestion.status !== "pending") {
+                    return interaction.reply({
+                        content: `⚠️ This suggestion is already ${suggestion.status}.`,
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                suggestion.status = isApprove ? "approved" : "denied";
+                suggestion.reviewedBy = interaction.user.id;
+                suggestion.reviewedAt = new Date().toISOString();
+                saveSuggestions();
+
+                const embed = buildSuggestionEmbed(suggestion);
+                const reviewedRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`suggestion_reviewed_${suggestion.id}_approved`)
+                        .setLabel("Approved")
+                        .setStyle(ButtonStyle.Success)
+                        .setDisabled(true),
+                    new ButtonBuilder()
+                        .setCustomId(`suggestion_reviewed_${suggestion.id}_denied`)
+                        .setLabel("Denied")
+                        .setStyle(ButtonStyle.Danger)
+                        .setDisabled(true)
+                );
+
+                await interaction.update({ embeds: [embed], components: [reviewedRow] });
+
+                const suggestionUser = await client.users.fetch(suggestion.authorId).catch(() => null);
+                if (suggestionUser) {
+                    const decisionWord = isApprove ? "accepted" : "denied";
+                    await suggestionUser.send(`Your suggestion **${suggestion.title}** was ${decisionWord} by <@${interaction.user.id}>.`).catch(() => {});
+                }
+
+                return;
             }
 
             if (interaction.customId === "start_patrol") {
@@ -5874,6 +6034,92 @@ client.on("interactionCreate", async interaction => {
 
         await interaction.reply({ embeds: [panelEmbed], components: [row] });
         return;
+    }
+
+    if (interaction.commandName === "suggestion") {
+        if (!interaction.guild || !interaction.channel) {
+            return interaction.reply({
+                content: "❌ Suggestions can only be submitted inside a server channel.",
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        const subcommand = interaction.options.getSubcommand();
+        if (subcommand !== "submit") {
+            return interaction.reply({
+                content: "Please use /suggestion submit command here.",
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        const title = interaction.options.getString("title").trim();
+        const description = interaction.options.getString("description").trim();
+        const linkInput = interaction.options.getString("link")?.trim() || "";
+        const imageInput = interaction.options.getString("image")?.trim() || "";
+
+        let link = "";
+        let imageUrl = "";
+
+        if (linkInput) {
+            try {
+                link = new URL(linkInput).toString();
+            } catch {
+                return interaction.reply({
+                    content: "❌ The provided link is not a valid URL.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+        }
+
+        if (imageInput) {
+            try {
+                imageUrl = new URL(imageInput).toString();
+            } catch {
+                return interaction.reply({
+                    content: "❌ The provided image link is not a valid URL.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+        }
+
+        const suggestion = {
+            id: nextSuggestionId(),
+            guildId: interaction.guildId,
+            channelId: interaction.channelId,
+            messageId: null,
+            authorId: interaction.user.id,
+            authorTag: interaction.user.tag,
+            title,
+            description,
+            link,
+            imageUrl,
+            status: "pending",
+            submittedAt: new Date().toISOString(),
+            reviewedBy: null,
+            reviewedAt: null
+        };
+
+        const embed = buildSuggestionEmbed(suggestion);
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`${SUGGESTION_APPROVE_PREFIX}${suggestion.id}`)
+                .setLabel("Approve")
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId(`${SUGGESTION_DENY_PREFIX}${suggestion.id}`)
+                .setLabel("Deny")
+                .setStyle(ButtonStyle.Danger)
+        );
+
+        const posted = await interaction.channel.send({ embeds: [embed], components: [row] });
+        suggestion.messageId = posted.id;
+        suggestionsData.suggestions[suggestion.id] = suggestion;
+        saveSuggestions();
+
+        return interaction.reply({
+            content: `✅ Suggestion submitted as **${suggestion.id}**.`,
+            flags: MessageFlags.Ephemeral
+        });
     }
     } catch (error) {
         console.error(error);

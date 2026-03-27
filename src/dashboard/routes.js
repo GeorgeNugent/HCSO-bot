@@ -411,6 +411,10 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             ? config.dashboardSegmentAccess
             : {};
 
+        const suggestionReviewerRoleIds = Array.isArray(config.suggestionReviewerRoleIds)
+            ? [...new Set(config.suggestionReviewerRoleIds.map(String).filter(Boolean))]
+            : [];
+
         return {
             availableRoles,
             segmentKeys: DASHBOARD_SEGMENTS,
@@ -419,7 +423,8 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             currentUserId: req.session.user?.id || null,
             roleSourceGuildId: ROLE_SOURCE_GUILD_ID,
             roleSourceGuildName: mainGuild?.name || "Hendry County Sheriff's Office",
-            dashboardSegmentAccess
+            dashboardSegmentAccess,
+            suggestionReviewerRoleIds
         };
     }
 
@@ -449,7 +454,8 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         res.render("bot-owner", {
             page: "bot-owner",
             cfg: {
-                dashboardSegmentAccess: ownerVm.dashboardSegmentAccess
+                dashboardSegmentAccess: ownerVm.dashboardSegmentAccess,
+                suggestionReviewerRoleIds: ownerVm.suggestionReviewerRoleIds
             },
             availableRoles: ownerVm.availableRoles,
             segmentKeys: ownerVm.segmentKeys,
@@ -1368,6 +1374,23 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             res.json({ success: true });
         } catch (err) {
             console.error("[Dashboard API] settings/segment-access:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Suggestion reviewer roles (Bot Owner only) ─────────────────────
+    router.post("/api/settings/suggestion-reviewers", requireStaff, segmentGuard("settings"), async (req, res) => {
+        try {
+            if (req.session.user?.id !== BOT_OWNER_ID) {
+                return res.status(403).json({ error: "Only the Bot Owner can change suggestion reviewer roles." });
+            }
+
+            const roleIds = Array.isArray(req.body?.roleIds) ? req.body.roleIds : [];
+            config.suggestionReviewerRoleIds = [...new Set(roleIds.map(String).filter(Boolean))];
+            saveConfig();
+            res.json({ success: true });
+        } catch (err) {
+            console.error("[Dashboard API] settings/suggestion-reviewers:", err.message);
             res.status(500).json({ error: err.message });
         }
     });

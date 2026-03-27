@@ -39,7 +39,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
-  #rolesSelect {
+  .roles-select {
     width: 100%;
     min-height: 280px;
     background: #0f1420;
@@ -72,7 +72,7 @@
 
 <div class="page-header">
   <h2 class="page-title">👑 Bot Owner Access</h2>
-  <p class="page-subtitle">Use dropdowns to edit one segment at a time without the clutter.</p>
+  <p class="page-subtitle">Configure dashboard segment visibility and suggestion reviewer roles.</p>
 </div>
 
 <div class="section-card">
@@ -101,21 +101,31 @@
 
     <div class="roles-wrap">
       <label>Allowed Roles (multi-select)</label>
-      <select id="rolesSelect" multiple></select>
+      <select id="rolesSelect" class="roles-select" multiple></select>
       <div class="owner-help">Tip: hold Ctrl (or Cmd) to select multiple roles quickly.</div>
       <div id="selectedPills" class="selected-pills"></div>
     </div>
 
+    <div class="roles-wrap">
+      <label>Suggestion Reviewer Roles (multi-select)</label>
+      <select id="suggestionRolesSelect" class="roles-select" multiple></select>
+      <div class="owner-help">Only these roles (plus admins/Bot Owner) can approve or deny suggestions.</div>
+      <div id="suggestionSelectedPills" class="selected-pills"></div>
+    </div>
+
     <div style="display:flex;gap:10px;align-items:center;margin-top:14px;">
       <button type="button" class="btn btn-info" id="saveOwnerAccessBtn">Save Segment Access</button>
+      <button type="button" class="btn btn-info" id="saveSuggestionReviewersBtn">Save Suggestion Reviewers</button>
       <a href="/settings" class="btn btn-outline">Back to Settings</a>
     </div>
     <div id="ownerAccessResult" class="inline-result" style="display:none;margin-top:10px;"></div>
+    <div id="suggestionReviewerResult" class="inline-result" style="display:none;margin-top:10px;"></div>
   <% } %>
 </div>
 
 <script id="ownerAccessData" type="application/json"><%- JSON.stringify({
   segmentAccess: cfg.dashboardSegmentAccess || {},
+  suggestionReviewerRoleIds: cfg.suggestionReviewerRoleIds || [],
   segmentKeys,
   availableRoles
 }) %></script>
@@ -127,16 +137,21 @@
 
   var parsed = JSON.parse(dataEl.textContent || '{}');
   var segmentAccess = parsed.segmentAccess || {};
+  var suggestionReviewerRoleIds = Array.isArray(parsed.suggestionReviewerRoleIds) ? parsed.suggestionReviewerRoleIds : [];
   var segmentKeys = parsed.segmentKeys || [];
   var availableRoles = parsed.availableRoles || [];
 
   var segmentSelect = document.getElementById('segmentSelect');
   var rolesSelect = document.getElementById('rolesSelect');
+  var suggestionRolesSelect = document.getElementById('suggestionRolesSelect');
   var resultEl = document.getElementById('ownerAccessResult');
+  var suggestionResultEl = document.getElementById('suggestionReviewerResult');
   var saveBtn = document.getElementById('saveOwnerAccessBtn');
+  var saveSuggestionBtn = document.getElementById('saveSuggestionReviewersBtn');
   var pills = document.getElementById('selectedPills');
+  var suggestionPills = document.getElementById('suggestionSelectedPills');
 
-  if (!segmentSelect || !rolesSelect || !saveBtn || !pills) return;
+  if (!segmentSelect || !rolesSelect || !suggestionRolesSelect || !saveBtn || !saveSuggestionBtn || !pills || !suggestionPills) return;
 
   function getCurrentSegment() {
     return segmentSelect.value;
@@ -164,6 +179,21 @@
     renderPills();
   }
 
+  function renderSuggestionRoleList() {
+    var selectedIds = new Set(suggestionReviewerRoleIds);
+
+    suggestionRolesSelect.innerHTML = '';
+    availableRoles.forEach(function (role) {
+      var opt = document.createElement('option');
+      opt.value = role.id;
+      opt.textContent = role.name + ' (' + role.id + ')';
+      opt.selected = selectedIds.has(role.id);
+      suggestionRolesSelect.appendChild(opt);
+    });
+
+    renderSuggestionPills();
+  }
+
   function renderPills() {
     var seg = getCurrentSegment();
     var selectedIds = new Set(segmentAccess[seg] || []);
@@ -187,11 +217,38 @@
       });
   }
 
+    function renderSuggestionPills() {
+      var selectedIds = new Set(suggestionReviewerRoleIds);
+
+      suggestionPills.innerHTML = '';
+      if (selectedIds.size === 0) {
+        var empty = document.createElement('span');
+        empty.className = 'selected-pill';
+        empty.textContent = 'No custom roles selected (fallback defaults will be used)';
+        suggestionPills.appendChild(empty);
+        return;
+      }
+
+      availableRoles
+        .filter(function (r) { return selectedIds.has(r.id); })
+        .forEach(function (role) {
+          var chip = document.createElement('span');
+          chip.className = 'selected-pill';
+          chip.textContent = role.name;
+          suggestionPills.appendChild(chip);
+        });
+    }
+
   function updateSegmentSelection() {
     var seg = getCurrentSegment();
     var selected = Array.from(rolesSelect.selectedOptions).map(function (o) { return o.value; });
     segmentAccess[seg] = selected;
     renderPills();
+  }
+
+  function updateSuggestionSelection() {
+    suggestionReviewerRoleIds = Array.from(suggestionRolesSelect.selectedOptions).map(function (o) { return o.value; });
+    renderSuggestionPills();
   }
 
   async function save() {
@@ -219,11 +276,39 @@
     }
   }
 
+  async function saveSuggestionReviewers() {
+    suggestionResultEl.style.display = 'block';
+    suggestionResultEl.className = 'inline-result';
+    suggestionResultEl.textContent = 'Saving...';
+
+    try {
+      var response = await fetch('/api/settings/suggestion-reviewers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roleIds: suggestionReviewerRoleIds })
+      });
+      var data = await response.json();
+      if (data.success) {
+        suggestionResultEl.textContent = '✅ Suggestion reviewer roles saved.';
+        suggestionResultEl.classList.add('result-success');
+      } else {
+        suggestionResultEl.textContent = '❌ ' + (data.error || 'Failed');
+        suggestionResultEl.classList.add('result-error');
+      }
+    } catch (e) {
+      suggestionResultEl.textContent = '❌ Network error';
+      suggestionResultEl.classList.add('result-error');
+    }
+  }
+
   normalizeAccess();
   renderRoleList();
+  renderSuggestionRoleList();
   segmentSelect.addEventListener('change', renderRoleList);
   rolesSelect.addEventListener('change', updateSegmentSelection);
+  suggestionRolesSelect.addEventListener('change', updateSuggestionSelection);
   saveBtn.addEventListener('click', save);
+  saveSuggestionBtn.addEventListener('click', saveSuggestionReviewers);
 })();
 </script>
 
