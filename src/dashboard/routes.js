@@ -15,11 +15,12 @@ import { getAllDepartments, getBranding } from "../embeds/departmentThemes.js";
  * @param {Function} helpers.getMainRoleGuild
  * @param {Function} helpers.segmentGuard
  * @param {string[]} helpers.DASHBOARD_SEGMENTS
+ * @param {string[]} helpers.BOT_OWNER_IDS
  * @param {string} helpers.BOT_OWNER_ID
  * @param {string} helpers.ROLE_SOURCE_GUILD_ID
  * @returns {import("express").Router}
  */
-export function createMainRoutes(context, { requireAuth, requireStaff, getDashboardGuild, getMainRoleGuild, segmentGuard, DASHBOARD_SEGMENTS, BOT_OWNER_ID, ROLE_SOURCE_GUILD_ID }) {
+export function createMainRoutes(context, { requireAuth, requireStaff, getDashboardGuild, getMainRoleGuild, segmentGuard, DASHBOARD_SEGMENTS, BOT_OWNER_IDS = [], BOT_OWNER_ID, ROLE_SOURCE_GUILD_ID }) {
     const {
         client,
         strikes,
@@ -332,7 +333,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
 
     async function getApplicationReviewScope(req) {
         const userId = req.session.user?.id || null;
-        const isBotOwner = userId === BOT_OWNER_ID;
+        const isBotOwner = BOT_OWNER_IDS.includes(String(userId));
         const departments = getAllDepartments();
         const departmentEntries = Object.entries(departments || {}).filter(([id, d]) => d && d.type === "department" && /^\d{17,20}$/.test(String(id)));
 
@@ -483,7 +484,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             serverOptions,
             availableRolesByGuild,
             segmentKeys: DASHBOARD_SEGMENTS,
-            isBotOwner: req.session.user?.id === BOT_OWNER_ID,
+            isBotOwner: BOT_OWNER_IDS.includes(String(req.session.user?.id || "")),
             botOwnerId: BOT_OWNER_ID,
             currentUserId: req.session.user?.id || null,
             roleSourceGuildId: ROLE_SOURCE_GUILD_ID,
@@ -1430,7 +1431,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Dashboard segment access (Bot Owner only) ──────────────────────
     router.post("/api/settings/segment-access", requireStaff, segmentGuard("settings"), async (req, res) => {
         try {
-            if (req.session.user?.id !== BOT_OWNER_ID) {
+            if (!BOT_OWNER_IDS.includes(String(req.session.user?.id || ""))) {
                 return res.status(403).json({ error: "Only the Bot Owner can change segment access." });
             }
 
@@ -1480,7 +1481,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Suggestion reviewer roles (Bot Owner only) ─────────────────────
     router.post("/api/settings/suggestion-reviewers", requireStaff, segmentGuard("settings"), async (req, res) => {
         try {
-            if (req.session.user?.id !== BOT_OWNER_ID) {
+            if (!BOT_OWNER_IDS.includes(String(req.session.user?.id || ""))) {
                 return res.status(403).json({ error: "Only the Bot Owner can change suggestion reviewer roles." });
             }
 
@@ -1510,7 +1511,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Applications reviewer roles (Bot Owner only) ──────────────────
     router.post("/api/settings/application-reviewers", requireStaff, segmentGuard("settings"), async (req, res) => {
         try {
-            if (req.session.user?.id !== BOT_OWNER_ID) {
+            if (!BOT_OWNER_IDS.includes(String(req.session.user?.id || ""))) {
                 return res.status(403).json({ error: "Only the Bot Owner can change application reviewer roles." });
             }
 

@@ -36,7 +36,8 @@ export function startDashboard(context) {
     const port           = context.port || Number(process.env.PORT) || 8100;
     const GUILD_ID       = process.env.GUILD_ID;
     const MAIN_ROLE_GUILD_ID = "1318018654515888138";
-    const BOT_OWNER_ID = "967375704486449222";
+    const BOT_OWNER_IDS = ["967375704486449222", "327951443090735104"];
+    const PRIMARY_BOT_OWNER_ID = BOT_OWNER_IDS[0];
     const DASHBOARD_SEGMENTS = ["home", "status", "commands", "logs", "settings", "applications", "departments"];
 
     // ── Express app ──────────────────────────────────────────────────────────
@@ -97,7 +98,7 @@ export function startDashboard(context) {
     }
 
     function canAccessSegment(userId, roleIds, segment, guildId = MAIN_ROLE_GUILD_ID) {
-        if (userId === BOT_OWNER_ID) return true;
+        if (BOT_OWNER_IDS.includes(String(userId))) return true;
         const access = getSegmentAccessConfig(guildId);
         const allowedRoles = Array.isArray(access[segment]) ? access[segment] : [];
         if (allowedRoles.length === 0) return true;
@@ -173,7 +174,7 @@ export function startDashboard(context) {
         res.locals.botAvatar  = client.user?.displayAvatarURL({ size: 64 }) || "";
         res.locals.user       = req.session.user  || null;
         res.locals.isStaff    = req.session.isStaff || false;
-        res.locals.isBotOwner = userId === BOT_OWNER_ID;
+        res.locals.isBotOwner = BOT_OWNER_IDS.includes(String(userId));
         res.locals.branding   = branding;
         res.locals.departments = departments;
         res.locals.servers    = servers;
@@ -191,7 +192,8 @@ export function startDashboard(context) {
         getMainRoleGuild,
         segmentGuard,
         canAccessSegment,
-        BOT_OWNER_ID,
+        BOT_OWNER_IDS,
+        BOT_OWNER_ID: PRIMARY_BOT_OWNER_ID,
         DASHBOARD_SEGMENTS,
         ROLE_SOURCE_GUILD_ID: MAIN_ROLE_GUILD_ID
     }));
