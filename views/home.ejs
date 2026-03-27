@@ -85,8 +85,8 @@
     <% if (!segmentAccess || segmentAccess.status) { %>
       <a href="/status"              class="quick-btn">📊 Bot Status</a>
     <% } %>
-    <% if (isBotOwner && (!segmentAccess || segmentAccess.settings)) { %>
-      <a href="/settings#bot-owner-access" class="quick-btn">👑 Bot Owner</a>
+    <% if (isBotOwner) { %>
+      <a href="/bot-owner" class="quick-btn">👑 Bot Owner</a>
     <% } %>
   </div>
 </div>

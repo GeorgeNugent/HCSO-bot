@@ -1,0 +1,230 @@
+<%- include('partials/header') %>
+
+<style>
+  .owner-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .owner-field label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .owner-field select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 14px;
+  }
+  .roles-wrap {
+    margin-top: 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    background: var(--surface2);
+  }
+  .roles-wrap label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  #rolesSelect {
+    width: 100%;
+    min-height: 280px;
+    background: #0f1420;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+  }
+  .owner-help {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin-top: 8px;
+  }
+  .selected-pills {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .selected-pill {
+    display: inline-block;
+    border: 1px solid #2f4f7d;
+    background: rgba(59,130,246,0.14);
+    color: #9cc2ff;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+</style>
+
+<div class="page-header">
+  <h2 class="page-title">👑 Bot Owner Access</h2>
+  <p class="page-subtitle">Use dropdowns to edit one segment at a time without the clutter.</p>
+</div>
+
+<div class="section-card">
+  <p class="section-desc">Signed in as: <code><%= currentUserId || 'unknown' %></code> | Bot Owner ID: <code><%= botOwnerId %></code></p>
+  <p class="section-desc">Role source server: <code><%= roleSourceGuildId %></code></p>
+
+  <% if (!isBotOwner) { %>
+    <div class="alert alert-danger" style="margin-top:12px;">Only Bot Owner can edit this page.</div>
+  <% } else { %>
+    <div class="owner-grid">
+      <div class="owner-field">
+        <label>Server</label>
+        <select id="serverSelect">
+          <option value="<%= roleSourceGuildId %>">Role Source Server (<%= roleSourceGuildId %>)</option>
+        </select>
+      </div>
+      <div class="owner-field">
+        <label>Dashboard Segment</label>
+        <select id="segmentSelect">
+          <% segmentKeys.forEach(function(seg) { %>
+            <option value="<%= seg %>"><%= seg.charAt(0).toUpperCase() + seg.slice(1) %></option>
+          <% }); %>
+        </select>
+      </div>
+    </div>
+
+    <div class="roles-wrap">
+      <label>Allowed Roles (multi-select)</label>
+      <select id="rolesSelect" multiple></select>
+      <div class="owner-help">Tip: hold Ctrl (or Cmd) to select multiple roles quickly.</div>
+      <div id="selectedPills" class="selected-pills"></div>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center;margin-top:14px;">
+      <button type="button" class="btn btn-info" id="saveOwnerAccessBtn">Save Segment Access</button>
+      <a href="/settings" class="btn btn-outline">Back to Settings</a>
+    </div>
+    <div id="ownerAccessResult" class="inline-result" style="display:none;margin-top:10px;"></div>
+  <% } %>
+</div>
+
+<script id="ownerAccessData" type="application/json"><%- JSON.stringify({
+  segmentAccess: cfg.dashboardSegmentAccess || {},
+  segmentKeys,
+  availableRoles
+}) %></script>
+
+<script>
+(function () {
+  var dataEl = document.getElementById('ownerAccessData');
+  if (!dataEl) return;
+
+  var parsed = JSON.parse(dataEl.textContent || '{}');
+  var segmentAccess = parsed.segmentAccess || {};
+  var segmentKeys = parsed.segmentKeys || [];
+  var availableRoles = parsed.availableRoles || [];
+
+  var segmentSelect = document.getElementById('segmentSelect');
+  var rolesSelect = document.getElementById('rolesSelect');
+  var resultEl = document.getElementById('ownerAccessResult');
+  var saveBtn = document.getElementById('saveOwnerAccessBtn');
+  var pills = document.getElementById('selectedPills');
+
+  if (!segmentSelect || !rolesSelect || !saveBtn || !pills) return;
+
+  function getCurrentSegment() {
+    return segmentSelect.value;
+  }
+
+  function normalizeAccess() {
+    segmentKeys.forEach(function (seg) {
+      if (!Array.isArray(segmentAccess[seg])) segmentAccess[seg] = [];
+    });
+  }
+
+  function renderRoleList() {
+    var seg = getCurrentSegment();
+    var selectedIds = new Set(segmentAccess[seg] || []);
+
+    rolesSelect.innerHTML = '';
+    availableRoles.forEach(function (role) {
+      var opt = document.createElement('option');
+      opt.value = role.id;
+      opt.textContent = role.name + ' (' + role.id + ')';
+      opt.selected = selectedIds.has(role.id);
+      rolesSelect.appendChild(opt);
+    });
+
+    renderPills();
+  }
+
+  function renderPills() {
+    var seg = getCurrentSegment();
+    var selectedIds = new Set(segmentAccess[seg] || []);
+
+    pills.innerHTML = '';
+    if (selectedIds.size === 0) {
+      var empty = document.createElement('span');
+      empty.className = 'selected-pill';
+      empty.textContent = 'No role restriction (all staff can view this segment)';
+      pills.appendChild(empty);
+      return;
+    }
+
+    availableRoles
+      .filter(function (r) { return selectedIds.has(r.id); })
+      .forEach(function (role) {
+        var chip = document.createElement('span');
+        chip.className = 'selected-pill';
+        chip.textContent = role.name;
+        pills.appendChild(chip);
+      });
+  }
+
+  function updateSegmentSelection() {
+    var seg = getCurrentSegment();
+    var selected = Array.from(rolesSelect.selectedOptions).map(function (o) { return o.value; });
+    segmentAccess[seg] = selected;
+    renderPills();
+  }
+
+  async function save() {
+    resultEl.style.display = 'block';
+    resultEl.className = 'inline-result';
+    resultEl.textContent = 'Saving...';
+
+    try {
+      var response = await fetch('/api/settings/segment-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ segmentAccess: segmentAccess })
+      });
+      var data = await response.json();
+      if (data.success) {
+        resultEl.textContent = '✅ Segment access saved.';
+        resultEl.classList.add('result-success');
+      } else {
+        resultEl.textContent = '❌ ' + (data.error || 'Failed');
+        resultEl.classList.add('result-error');
+      }
+    } catch (e) {
+      resultEl.textContent = '❌ Network error';
+      resultEl.classList.add('result-error');
+    }
+  }
+
+  normalizeAccess();
+  renderRoleList();
+  segmentSelect.addEventListener('change', renderRoleList);
+  rolesSelect.addEventListener('change', updateSegmentSelection);
+  saveBtn.addEventListener('click', save);
+})();
+</script>
+
+<%- include('partials/footer') %>

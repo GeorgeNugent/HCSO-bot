@@ -63,8 +63,8 @@
           <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
         </a>
       <% } %>
-      <% if (isBotOwner && (!segmentAccess || segmentAccess.settings)) { %>
-        <a href="/settings#bot-owner-access" class="nav-link">
+      <% if (isBotOwner) { %>
+        <a href="/bot-owner" class="nav-link <%= page === 'bot-owner' ? 'active' : '' %>">
           <span class="nav-icon">👑</span><span class="nav-label">Bot Owner</span>
         </a>
       <% } %>
@@ -92,7 +92,7 @@
              class="nav-link <%= page === 'department' && typeof guildId !== 'undefined' && guildId === srv.id ? 'active' : '' %>"
              title="<%= srv.name %>">
             <% if ((departments[srv.id] || {}).logo) { %>
-              <span class="nav-icon" style="display:flex;align-items:center;width:20px;height:20px;"><img src="<%= departments[srv.id].logo %>" alt="" style="width:20px;height:20px;border-radius:3px;object-fit:contain;" onerror="this.parentElement.textContent='🏛️'"></span>
+              <span class="nav-icon" style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;"><img src="<%= departments[srv.id].logo %>" alt="" style="width:24px;height:24px;border-radius:4px;object-fit:contain;" onerror="this.parentElement.textContent='🏛️'"></span>
             <% } else { %>
               <span class="nav-icon">🏛️</span>
             <% } %>

@@ -1,5 +1,27 @@
 <%- include('partials/header') %>
 
+<style>
+  .server-identity {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .server-logo {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    object-fit: contain;
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.04);
+    padding: 2px;
+  }
+  .department-cell {
+    min-width: 220px;
+    max-width: 360px;
+    white-space: normal;
+  }
+</style>
+
 <div class="page-header">
   <h2 class="page-title">🌐 All Servers</h2>
   <p class="page-subtitle">
@@ -54,11 +76,11 @@
           <% servers.forEach(srv => { %>
           <tr>
             <td>
-              <div style="display:flex;align-items:center;gap:10px;">
+              <div class="server-identity">
                 <% if (srv.logo) { %>
-                  <img src="<%= srv.logo %>" alt="" style="width:32px;height:32px;border-radius:50%;object-fit:contain;" onerror="this.style.display='none'">
+                  <img src="<%= srv.logo %>" alt="" class="server-logo" onerror="this.style.display='none'">
                 <% } else if (srv.icon) { %>
-                  <img src="<%= srv.icon %>" alt="" style="width:32px;height:32px;border-radius:50%;" onerror="this.style.display='none'">
+                  <img src="<%= srv.icon %>" alt="" class="server-logo" onerror="this.style.display='none'">
                 <% } else { %>
                   <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;">🏘️</div>
                 <% } %>
@@ -68,7 +90,7 @@
                 </div>
               </div>
             </td>
-            <td>
+            <td class="department-cell">
               <span class="badge dept-badge" data-color="<%= srv.color %>">
                 <%= srv.department %>
               </span>

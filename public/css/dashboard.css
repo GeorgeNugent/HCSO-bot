@@ -127,7 +127,7 @@ code {
 .nav-link {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 9px 12px;
   border-radius: var(--radius);
   color: var(--text-muted);
@@ -142,9 +142,9 @@ code {
 }
 
 .nav-link.active {
-  background: var(--accent-hover);
+  background: rgba(59, 130, 246, 0.2);
   color: var(--text);
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--info);
 }
 
 .nav-icon { font-size: 16px; }

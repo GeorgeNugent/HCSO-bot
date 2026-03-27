@@ -240,8 +240,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         });
     });
 
-    // ── Settings page ─────────────────────────────────────────────────────────
-    router.get("/settings", requireStaff, segmentGuard("settings"), async (req, res) => {
+    async function getBotOwnerAccessViewModel(req) {
         const mainGuild = await getMainRoleGuild();
         const availableRoles = mainGuild
             ? mainGuild.roles.cache
@@ -254,6 +253,21 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             ? config.dashboardSegmentAccess
             : {};
 
+        return {
+            availableRoles,
+            segmentKeys: DASHBOARD_SEGMENTS,
+            isBotOwner: req.session.user?.id === BOT_OWNER_ID,
+            botOwnerId: BOT_OWNER_ID,
+            currentUserId: req.session.user?.id || null,
+            roleSourceGuildId: ROLE_SOURCE_GUILD_ID,
+            dashboardSegmentAccess
+        };
+    }
+
+    // ── Settings page ─────────────────────────────────────────────────────────
+    router.get("/settings", requireStaff, segmentGuard("settings"), async (req, res) => {
+        const ownerVm = await getBotOwnerAccessViewModel(req);
+
         res.render("settings", {
             page:    "settings",
             cfg: {
@@ -263,15 +277,27 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
                 ticketTypes:         config.ticketTypes         || [],
                 statusRoles:         config.statusRoles         || [],
                 moduleRoleAccess:    config.moduleRoleAccess    || {},
-                dashboardSegmentAccess
+                dashboardSegmentAccess: ownerVm.dashboardSegmentAccess
             },
             guildId: GUILD_ID || null,
-            availableRoles,
-            segmentKeys: DASHBOARD_SEGMENTS,
-            isBotOwner: req.session.user?.id === BOT_OWNER_ID,
-            botOwnerId: BOT_OWNER_ID,
-            currentUserId: req.session.user?.id || null,
-            roleSourceGuildId: ROLE_SOURCE_GUILD_ID
+            isBotOwner: ownerVm.isBotOwner
+        });
+    });
+
+    // ── Bot Owner page (separate from Settings) ──────────────────────────────
+    router.get("/bot-owner", requireStaff, segmentGuard("settings"), async (req, res) => {
+        const ownerVm = await getBotOwnerAccessViewModel(req);
+        res.render("bot-owner", {
+            page: "bot-owner",
+            cfg: {
+                dashboardSegmentAccess: ownerVm.dashboardSegmentAccess
+            },
+            availableRoles: ownerVm.availableRoles,
+            segmentKeys: ownerVm.segmentKeys,
+            isBotOwner: ownerVm.isBotOwner,
+            botOwnerId: ownerVm.botOwnerId,
+            currentUserId: ownerVm.currentUserId,
+            roleSourceGuildId: ownerVm.roleSourceGuildId
         });
     });
 
