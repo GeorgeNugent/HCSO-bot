@@ -5463,10 +5463,10 @@ client.on("messageCreate", async message => {
     const normalized = message.content.trim().toLowerCase();
     if (!normalized.startsWith(">")) return;
 
-    const args = normalized.slice(1).trim().split(/ +/);
-    const command = args.shift();
+    const commandMatch = normalized.match(/^>\s*([a-z0-9_-]+)/);
+    const command = commandMatch ? commandMatch[1] : "";
 
-    if (command === "onlinedash") {
+    if (command === "onlinedash" || command === "dashlink" || command === "dashboardlink") {
         try {
             const webUrl = process.env.DASHBOARD_URL || "http://45.143.198.46:8100";
             await message.channel.send({ content: `Web Dashboard: ${webUrl}` });
