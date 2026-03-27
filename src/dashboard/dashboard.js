@@ -35,7 +35,7 @@ export function startDashboard(context) {
     const SESSION_SECRET = process.env.SESSION_SECRET || "twin-palms-dashboard-secret-change-me";
     const port           = context.port || Number(process.env.PORT) || 8100;
     const GUILD_ID       = process.env.GUILD_ID;
-    const MAIN_ROLE_GUILD_ID = "1482203107432595601";
+    const MAIN_ROLE_GUILD_ID = "1300239835293814925";
     const BOT_OWNER_ID = "967375704486449222";
     const DASHBOARD_SEGMENTS = ["home", "status", "commands", "logs", "settings", "applications", "departments"];
 
