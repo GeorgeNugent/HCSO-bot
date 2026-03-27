@@ -3,7 +3,7 @@
  * Extracted from the root dashboard.js so the entry point stays lean.
  */
 import { Router } from "express";
-import { ActivityType } from "discord.js";
+import { ActivityType, EmbedBuilder } from "discord.js";
 import { getBranding } from "../embeds/departmentThemes.js";
 
 /**
@@ -39,7 +39,47 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     } = context;
 
     const GUILD_ID = process.env.GUILD_ID;
+    const LOA_ROLE_ID = "1482203107806150668";
     const router   = Router();
+
+    function getDashboardLogChannelId(guildId, logType) {
+        const channels = config.logChannels || {};
+        const guildScoped = guildId && channels[guildId] && typeof channels[guildId] === "object"
+            ? channels[guildId]
+            : null;
+
+        if (guildScoped && typeof guildScoped[logType] === "string" && guildScoped[logType]) {
+            return guildScoped[logType];
+        }
+
+        if (typeof channels[logType] === "string" && channels[logType]) {
+            return channels[logType];
+        }
+
+        return null;
+    }
+
+    async function sendDashboardActionLog({ guildId, logType, title, fields, color = 0xF8B637 }) {
+        try {
+            const channelId = getDashboardLogChannelId(guildId, logType);
+            if (!channelId) return;
+
+            const channel = client.channels.cache.get(channelId)
+                || await client.channels.fetch(channelId).catch(() => null);
+
+            if (!channel || !channel.isTextBased()) return;
+
+            const embed = new EmbedBuilder()
+                .setColor(color)
+                .setTitle(title)
+                .addFields(...(fields || []))
+                .setTimestamp();
+
+            await channel.send({ embeds: [embed] }).catch(() => {});
+        } catch {
+            // Non-fatal: dashboard action succeeded even if log channel fails.
+        }
+    }
 
     // ── Public ────────────────────────────────────────────────────────────────
     router.get("/health", (req, res) => res.send("OK"));
@@ -320,6 +360,20 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             entries.push({ reason, givenBy: req.session.user.id, date: new Date().toISOString() });
             saveStrikes();
             await syncUserStrikeRoles(guild, userId, entries.length);
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "strike",
+                title: "⚖️ Dashboard Strike Added",
+                fields: [
+                    { name: "Target", value: `<@${userId}>`, inline: true },
+                    { name: "Given By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Reason", value: reason, inline: false },
+                    { name: "Total Strikes", value: String(entries.length), inline: true }
+                ],
+                color: 0xE8A020
+            });
+
             res.json({ success: true, totalStrikes: entries.length });
         } catch (err) {
             console.error("[Dashboard API] strike:", err.message);
@@ -342,6 +396,20 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             entries.splice(entries.length - remove, remove);
             saveStrikes();
             await syncUserStrikeRoles(guild, userId, entries.length);
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "strike",
+                title: "🧹 Dashboard Strike Removed",
+                fields: [
+                    { name: "Target", value: `<@${userId}>`, inline: true },
+                    { name: "Removed By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Removed", value: String(remove), inline: true },
+                    { name: "Remaining", value: String(entries.length), inline: true }
+                ],
+                color: 0x3B82F6
+            });
+
             res.json({ success: true, removed: remove, totalStrikes: entries.length });
         } catch (err) {
             console.error("[Dashboard API] strike-remove:", err.message);
@@ -362,6 +430,19 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             await guild.members.ban(userId, {
                 reason: `Dashboard ban by ${req.session.user.username}: ${reason}`
             });
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "ban",
+                title: "🔨 Dashboard Ban",
+                fields: [
+                    { name: "Target", value: `<@${userId}>`, inline: true },
+                    { name: "Banned By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Reason", value: reason, inline: false }
+                ],
+                color: 0xE03C3C
+            });
+
             res.json({ success: true });
         } catch (err) {
             console.error("[Dashboard API] ban:", err.message);
@@ -384,6 +465,19 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             if (!member.kickable) return res.status(403).json({ error: "Cannot kick this member (role hierarchy)" });
 
             await member.kick(`Dashboard kick by ${req.session.user.username}: ${reason}`);
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "moderation",
+                title: "👢 Dashboard Kick",
+                fields: [
+                    { name: "Target", value: `<@${userId}>`, inline: true },
+                    { name: "Kicked By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Reason", value: reason, inline: false }
+                ],
+                color: 0xE03C3C
+            });
+
             res.json({ success: true });
         } catch (err) {
             console.error("[Dashboard API] kick:", err.message);
@@ -407,6 +501,20 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
 
             const ms = Math.min(parseInt(minutes) * 60 * 1000, 28 * 24 * 60 * 60 * 1000);
             await member.timeout(ms, `Dashboard timeout by ${req.session.user.username}: ${reason || "No reason"}`);
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "timeout",
+                title: "⏱️ Dashboard Timeout",
+                fields: [
+                    { name: "Target", value: `<@${userId}>`, inline: true },
+                    { name: "Timed Out By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Minutes", value: String(minutes), inline: true },
+                    { name: "Reason", value: reason || "No reason", inline: false }
+                ],
+                color: 0x8E44AD
+            });
+
             res.json({ success: true });
         } catch (err) {
             console.error("[Dashboard API] timeout:", err.message);
@@ -425,6 +533,19 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             if (!guild) return res.status(404).json({ error: "Guild not found" });
 
             await guild.bans.remove(userId, reason || `Unbanned via dashboard by ${req.session.user.username}`);
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "moderation",
+                title: "🔓 Dashboard Unban",
+                fields: [
+                    { name: "Target", value: `<@${userId}>`, inline: true },
+                    { name: "Unbanned By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Reason", value: reason || "No reason", inline: false }
+                ],
+                color: 0x23A559
+            });
+
             res.json({ success: true });
         } catch (err) {
             console.error("[Dashboard API] unban:", err.message);
@@ -447,6 +568,20 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
 
             const count   = Math.min(Math.max(1, parseInt(amount) || 1), 100);
             const deleted = await channel.bulkDelete(count, true);
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "moderation",
+                title: "🧹 Dashboard Purge",
+                fields: [
+                    { name: "Channel", value: `<#${channelId}>`, inline: true },
+                    { name: "Requested", value: String(count), inline: true },
+                    { name: "Deleted", value: String(deleted.size), inline: true },
+                    { name: "Performed By", value: `<@${req.session.user.id}>`, inline: true }
+                ],
+                color: 0x3B82F6
+            });
+
             res.json({ success: true, deleted: deleted.size });
         } catch (err) {
             console.error("[Dashboard API] purge:", err.message);
@@ -477,6 +612,19 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
                 .setTimestamp();
 
             await channel.send({ embeds: [embed] });
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "discord",
+                title: "📣 Dashboard Announcement",
+                fields: [
+                    { name: "Channel", value: `<#${channelId}>`, inline: true },
+                    { name: "Posted By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Title", value: title?.trim() || "Announcement", inline: false }
+                ],
+                color: 0x5865F2
+            });
+
             res.json({ success: true });
         } catch (err) {
             console.error("[Dashboard API] announce:", err.message);
@@ -500,7 +648,33 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             loa[userId].startDate = startDate;
             loa[userId].endDate   = endDate;
             loa[userId].reason    = reason || "";
+
+            const guild = await getDashboardGuild();
+            const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
+            if (guild && member) {
+                const loaRole = await guild.roles.fetch(LOA_ROLE_ID).catch(() => null);
+                if (loaRole) {
+                    await member.roles.add(loaRole).catch(() => {});
+                }
+            }
+
             saveLOA();
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "loa",
+                title: "🌴 Dashboard LOA Set",
+                fields: [
+                    { name: "Target", value: `<@${userId}>`, inline: true },
+                    { name: "Set By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Start", value: startDate, inline: true },
+                    { name: "End", value: endDate, inline: true },
+                    { name: "Reason", value: reason || "No reason", inline: false },
+                    { name: "Role", value: `<@&${LOA_ROLE_ID}>`, inline: true }
+                ],
+                color: 0x23A559
+            });
+
             res.json({ success: true });
         } catch (err) {
             console.error("[Dashboard API] loa:", err.message);
@@ -516,8 +690,30 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
 
             if (!loa[userId]?.onLOA) return res.status(400).json({ error: "User is not currently on LOA" });
 
+            const guild = await getDashboardGuild();
+            const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
+            if (guild && member) {
+                const loaRole = await guild.roles.fetch(LOA_ROLE_ID).catch(() => null);
+                if (loaRole) {
+                    await member.roles.remove(loaRole).catch(() => {});
+                }
+            }
+
             loa[userId].onLOA = false;
             saveLOA();
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "loa",
+                title: "✅ Dashboard LOA Ended",
+                fields: [
+                    { name: "Target", value: `<@${userId}>`, inline: true },
+                    { name: "Ended By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Role Removed", value: `<@&${LOA_ROLE_ID}>`, inline: true }
+                ],
+                color: 0x23A559
+            });
+
             res.json({ success: true });
         } catch (err) {
             console.error("[Dashboard API] end-loa:", err.message);
@@ -539,6 +735,19 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             entry.closedBy    = req.session.user.id;
             if (reason) entry.closeReason = reason;
             saveCases();
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "case",
+                title: "📋 Dashboard Case Closed",
+                fields: [
+                    { name: "Case ID", value: caseId, inline: true },
+                    { name: "Closed By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Reason", value: reason || "No reason", inline: false }
+                ],
+                color: 0xE8A020
+            });
+
             res.json({ success: true });
         } catch (err) {
             console.error("[Dashboard API] case-close:", err.message);
