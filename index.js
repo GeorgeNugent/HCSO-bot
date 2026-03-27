@@ -1321,7 +1321,6 @@ const commands = [
     new SlashCommandBuilder()
         .setName("onlinedash")
         .setDescription("Post the web dashboard link in chat")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
 
 ].map(c => c.toJSON());
 
@@ -1330,6 +1329,20 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 try {
     await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
     console.log(`Registered ${commands.length} application commands.`);
+
+    // Register onlinedash as a guild command for instant availability in the main server.
+    if (GUILD_ID) {
+        const guildQuickCommands = [
+            new SlashCommandBuilder()
+                .setName("onlinedash")
+                .setDescription("Post the web dashboard link in chat")
+                .toJSON()
+        ];
+        await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: guildQuickCommands });
+        console.log("Registered guild quick command: /onlinedash");
+    } else {
+        console.warn("GUILD_ID is not set; skipped guild quick command registration for /onlinedash.");
+    }
 } catch (error) {
     console.error("Failed to register application commands:", error);
     console.error("Continuing startup without command registration. Existing commands will remain until this is fixed.");
