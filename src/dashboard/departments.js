@@ -19,7 +19,7 @@ import { getAllDepartments, getBranding } from "../embeds/departmentThemes.js";
  *           MAX_STRIKES: number }} deps
  * @returns {import("express").Router}
  */
-export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats, client, config, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES, patrols, loa, casesData }) {
+export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats, client, config, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES, patrols, loa, casesData, saveCases, saveLOA }) {
     const router = Router();
     const STRIKE_ROLE_IDS = [
         "1485084924921774242",
@@ -27,6 +27,29 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
         "1485085025157382244"
     ];
     const SHERIFF_ALERT_ROLE_ID = "1482203108108013584";
+
+    // ── Case helpers (mirrored from routes.js) ────────────────────────────────
+    function resolveCaseKey(rawId) {
+        const id = String(rawId || "").trim();
+        if (!id) return null;
+        const cases = casesData?.cases || {};
+        if (id in cases) return id;
+        const up = id.toUpperCase();
+        if (up in cases) return up;
+        const found = Object.keys(cases).find(k => k.toLowerCase() === id.toLowerCase());
+        return found || null;
+    }
+
+    function ensureCaseCounter() {
+        if (!casesData) return;
+        if (typeof casesData.caseCounter !== "number" || isNaN(casesData.caseCounter)) {
+            const max = Object.keys(casesData.cases || {})
+                .map(k => parseInt((k.match(/\d+/) || ["0"])[0]))
+                .filter(n => !isNaN(n))
+                .reduce((a, b) => Math.max(a, b), 0);
+            casesData.caseCounter = max;
+        }
+    }
 
     // ── All servers / departments overview ────────────────────────────────────
         // -- Joint Operations --
@@ -160,6 +183,38 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
                 }
             }
 
+            // Department-scoped cases (own + joint ops)
+            const deptCases = casesData
+                ? Object.entries(casesData.cases || {})
+                    .filter(([, c]) => c.department === guildId || c.department === "joint")
+                    .sort((a, b) => new Date(b[1].createdAt) - new Date(a[1].createdAt))
+                    .slice(0, 200)
+                    .map(([id, c]) => ({ id, title: c.title || id, status: c.status || "Open", createdAt: c.createdAt, department: c.department }))
+                : [];
+            const deptOpenCases = deptCases.filter(c => c.status !== "Closed");
+
+            // Members of this guild who are on LOA
+            const guildMemberIds = new Set(members.map(m => m.id));
+            const usersOnLoa = Object.entries(loa || {})
+                .filter(([uid, d]) => d.onLOA && guildMemberIds.has(uid))
+                .map(([uid, d]) => {
+                    const m = members.find(x => x.id === uid);
+                    return { id: uid, name: m?.name || uid, startDate: d.startDate, endDate: d.endDate };
+                });
+
+            // Strike log for this guild
+            const guildStrikeStore = strikes[guildId] || {};
+            const deptStrikeLogs = Object.entries(guildStrikeStore)
+                .flatMap(([uid, entries]) => (Array.isArray(entries) ? entries : []).map(e => ({
+                    userId: uid,
+                    name:   members.find(m => m.id === uid)?.name || uid,
+                    reason: e.reason   || "No reason",
+                    date:   e.date     ? new Date(e.date).toLocaleDateString() : "—",
+                    givenBy: e.givenBy || "Unknown"
+                })))
+                .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+                .slice(0, 100);
+
             res.render("department", {
                 page:       "department",
                 guildId,
@@ -167,8 +222,12 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
                 detail,
                 members,
                 memberLoadError,
-                MAX_STRIKES: MAX_STRIKES ?? 3,
-                branding
+                MAX_STRIKES:     MAX_STRIKES ?? 3,
+                branding,
+                deptCases,
+                deptOpenCases,
+                usersOnLoa,
+                deptStrikeLogs
             });
         } catch (err) {
             console.error("[Dept] /departments/:guildId error:", err.message);
@@ -325,6 +384,202 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
 
             await guild.bans.remove(userId, `Unbanned via dashboard by ${req.session.user.username}`);
             res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Case – Create ────────────────────────────────────────────────────
+    router.post("/api/guild/:guildId/case-create", requireStaff, segmentGuard("departments"), async (req, res) => {
+        try {
+            const { guildId } = req.params;
+            const { title, incidentType, location, suspect, summary, jointOps } = req.body;
+            if (!title) return res.status(400).json({ error: "Title is required" });
+            if (!casesData) return res.status(503).json({ error: "Cases not available" });
+
+            ensureCaseCounter();
+            casesData.caseCounter = (casesData.caseCounter || 0) + 1;
+            const id  = `CASE-${String(casesData.caseCounter).padStart(6, "0")}`;
+            const isJoint = jointOps === "true" || jointOps === true;
+
+            casesData.cases[id] = {
+                title,
+                incidentType: incidentType || "",
+                location:     location     || "",
+                suspect:      suspect      || "",
+                summary:      summary      || "",
+                status:       "Open",
+                department:   isJoint ? "joint" : guildId,
+                createdAt:    new Date().toISOString(),
+                createdBy:    req.session.user.id,
+                evidence:     [],
+                notes:        []
+            };
+            await saveCases();
+            res.json({ success: true, message: `Case ${id} created.`, caseId: id });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Case – View ──────────────────────────────────────────────────────
+    router.post("/api/guild/:guildId/case-view", requireStaff, segmentGuard("departments"), async (req, res) => {
+        try {
+            const { guildId } = req.params;
+            const { caseId } = req.body;
+            if (!caseId) return res.status(400).json({ error: "caseId required" });
+            if (!casesData) return res.status(503).json({ error: "Cases not available" });
+
+            const key = resolveCaseKey(caseId);
+            if (!key) return res.status(404).json({ error: `Case '${caseId}' not found` });
+
+            const c = casesData.cases[key];
+            if (c.department !== guildId && c.department !== "joint") {
+                return res.status(403).json({ error: "Access denied – not your department's case" });
+            }
+
+            res.json({ success: true, case: { id: key, ...c } });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Case – Close ─────────────────────────────────────────────────────
+    router.post("/api/guild/:guildId/case-close", requireStaff, segmentGuard("departments"), async (req, res) => {
+        try {
+            const { guildId } = req.params;
+            const { caseId, reason } = req.body;
+            if (!caseId) return res.status(400).json({ error: "caseId required" });
+            if (!casesData) return res.status(503).json({ error: "Cases not available" });
+
+            const key = resolveCaseKey(caseId);
+            if (!key) return res.status(404).json({ error: `Case '${caseId}' not found` });
+
+            const c = casesData.cases[key];
+            if (c.department !== guildId && c.department !== "joint") {
+                return res.status(403).json({ error: "Access denied" });
+            }
+
+            c.status     = "Closed";
+            c.closedAt   = new Date().toISOString();
+            c.closedBy   = req.session.user.id;
+            if (reason) c.closeReason = reason;
+            await saveCases();
+            res.json({ success: true, message: `Case ${key} closed.` });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Case – Assign ────────────────────────────────────────────────────
+    router.post("/api/guild/:guildId/case-assign", requireStaff, segmentGuard("departments"), async (req, res) => {
+        try {
+            const { guildId } = req.params;
+            const { caseId, assignTo } = req.body;
+            if (!caseId || !assignTo) return res.status(400).json({ error: "caseId and assignTo required" });
+            if (!casesData) return res.status(503).json({ error: "Cases not available" });
+
+            const key = resolveCaseKey(caseId);
+            if (!key) return res.status(404).json({ error: `Case '${caseId}' not found` });
+
+            const c = casesData.cases[key];
+            if (c.department !== guildId && c.department !== "joint") {
+                return res.status(403).json({ error: "Access denied" });
+            }
+
+            c.assignedTo = assignTo;
+            await saveCases();
+            res.json({ success: true, message: `Case ${key} assigned to ${assignTo}.` });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Evidence – Add ───────────────────────────────────────────────────
+    router.post("/api/guild/:guildId/evidence-add", requireStaff, segmentGuard("departments"), async (req, res) => {
+        try {
+            const { guildId } = req.params;
+            const { caseId, evidence } = req.body;
+            if (!caseId || !evidence) return res.status(400).json({ error: "caseId and evidence required" });
+            if (!casesData) return res.status(503).json({ error: "Cases not available" });
+
+            const key = resolveCaseKey(caseId);
+            if (!key) return res.status(404).json({ error: `Case '${caseId}' not found` });
+
+            const c = casesData.cases[key];
+            if (c.department !== guildId && c.department !== "joint") {
+                return res.status(403).json({ error: "Access denied" });
+            }
+
+            if (!Array.isArray(c.evidence)) c.evidence = [];
+            c.evidence.push({ text: evidence, addedBy: req.session.user.id, addedAt: new Date().toISOString() });
+            await saveCases();
+            res.json({ success: true, message: `Evidence added to ${key}.` });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Case – Delete ────────────────────────────────────────────────────
+    router.post("/api/guild/:guildId/case-delete", requireStaff, segmentGuard("departments"), async (req, res) => {
+        try {
+            const { guildId } = req.params;
+            const { caseId, confirmation } = req.body;
+            if (!caseId) return res.status(400).json({ error: "caseId required" });
+            if (confirmation !== "YES") return res.status(400).json({ error: 'Type "YES" to confirm deletion' });
+            if (!casesData) return res.status(503).json({ error: "Cases not available" });
+
+            const key = resolveCaseKey(caseId);
+            if (!key) return res.status(404).json({ error: `Case '${caseId}' not found` });
+
+            const c = casesData.cases[key];
+            if (c.department !== guildId && c.department !== "joint") {
+                return res.status(403).json({ error: "Access denied" });
+            }
+
+            delete casesData.cases[key];
+            await saveCases();
+            res.json({ success: true, message: `Case ${key} deleted.` });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: LOA – Set ────────────────────────────────────────────────────────
+    router.post("/api/guild/:guildId/loa", requireStaff, segmentGuard("departments"), async (req, res) => {
+        try {
+            const { userId, startDate, endDate, reason } = req.body;
+            if (!userId || !endDate) return res.status(400).json({ error: "userId and endDate required" });
+            if (!loa) return res.status(503).json({ error: "LOA data not available" });
+
+            loa[userId] = {
+                onLOA:     true,
+                startDate: startDate || new Date().toISOString().split("T")[0],
+                endDate,
+                reason:    reason || ""
+            };
+            await saveLOA();
+            res.json({ success: true, message: `LOA set for <@${userId}> until ${endDate}.` });
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: LOA – End ────────────────────────────────────────────────────────
+    router.post("/api/guild/:guildId/end-loa", requireStaff, segmentGuard("departments"), async (req, res) => {
+        try {
+            const { userId } = req.body;
+            if (!userId) return res.status(400).json({ error: "userId required" });
+            if (!loa) return res.status(503).json({ error: "LOA data not available" });
+
+            if (!loa[userId]?.onLOA) {
+                return res.status(400).json({ error: "This user is not on LOA" });
+            }
+
+            loa[userId].onLOA   = false;
+            loa[userId].endedAt = new Date().toISOString();
+            await saveLOA();
+            res.json({ success: true, message: `LOA ended for <@${userId}>.` });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }

@@ -824,3 +824,12 @@ code {
     font-size: 12px;
   }
 }
+
+/* ── Custom gray scrollbar (no white box or arrows) ─────────────────────── */
+::-webkit-scrollbar              { width: 7px; height: 7px; }
+::-webkit-scrollbar-track        { background: var(--surface2, #1e1e24); border-radius: 4px; }
+::-webkit-scrollbar-thumb        { background: #4a4a55; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover  { background: #606068; }
+::-webkit-scrollbar-button       { display: none; height: 0; width: 0; }
+::-webkit-scrollbar-corner       { background: var(--surface2, #1e1e24); }
+* { scrollbar-width: thin; scrollbar-color: #4a4a55 var(--surface2, #1e1e24); }

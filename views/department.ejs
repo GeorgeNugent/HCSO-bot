@@ -30,6 +30,7 @@
   .btn-kick    { background:#c0392b;color:#fff;border:none; }
   .btn-timeout { background:#8e44ad;color:#fff;border:none; }
   .btn-ban     { background:#2c3e50;color:#fff;border:none; }
+    .btn-strike-remove { background:#555;color:#fff;border:none; }
   #memberTable {
     width: 100%;
     min-width: 1180px;
@@ -89,7 +90,18 @@
       <h2 class="page-title" style="margin:0;"><%= dept.name %></h2>
       <p class="page-subtitle" style="margin:4px 0 0;">
         <%= detail.name %> &nbsp;·&nbsp; <%= detail.memberCount.toLocaleString() %> members
-      </p>
+    <!-- Tab bar -->
+    <div class="tab-bar" style="margin-bottom:0;border-bottom:none;padding-bottom:0;">
+      <button class="tab-btn active" data-dtab="dtab-members">👥 Members</button>
+      <button class="tab-btn" data-dtab="dtab-cases">📋 Cases</button>
+      <button class="tab-btn" data-dtab="dtab-loa">🌴 LOA Manager</button>
+      <button class="tab-btn" data-dtab="dtab-logs">📋 View Logs</button>
+    </div>
+
+    <!-- ─── Members tab panel ─────────────────────────────────────────────── -->
+    <div id="dtab-members" class="tab-panel active">
+    <!-- Member list -->
+    <div class="card">
     </div>
   </div>
 </div>
@@ -180,6 +192,7 @@
                 <button class="btn btn-sm btn-timeout" data-action="timeout" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">⏱ Timeout</button>
                 <button class="btn btn-sm btn-kick"    data-action="kick"    data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">👢 Kick</button>
                 <button class="btn btn-sm btn-ban"     data-action="ban"     data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">🔨 Ban</button>
+                  <button class="btn btn-sm btn-strike-remove" data-action="strike-remove" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">❌ Remove Strike</button>
               </div>
             </td>
           </tr>
@@ -194,6 +207,180 @@
 <div style="margin-top:16px;">
   <a href="/servers" class="btn btn-outline">← Back to All Servers</a>
 </div>
+
+<!-- ── Action modal ───────────────────────────────────────────────────────── -->
+</div><!-- end dtab-members -->
+
+<!-- ─── Cases tab panel ──────────────────────────────────────────────────── -->
+<div id="dtab-cases" class="tab-panel">
+  <% if ((deptCases||[]).length === 0) { %>
+    <p style="color:var(--text-muted);padding:8px 0;">No cases for this department yet. Create one below.</p>
+  <% } %>
+  <div class="cmd-grid">
+    <div class="cmd-card">
+      <div class="cmd-card-header"><span class="cmd-card-icon">🆕</span><div class="cmd-card-title">Create Case</div></div>
+      <div class="cmd-card-body">
+        <div class="form-group"><label>Title</label><input class="form-control" id="dc-title" placeholder="Case title…"></div>
+        <div class="form-group"><label>Incident Type</label><input class="form-control" id="dc-type" placeholder="e.g. Traffic Stop"></div>
+        <div class="form-group"><label>Location</label><input class="form-control" id="dc-loc" placeholder="Location…"></div>
+        <div class="form-group"><label>Suspect (optional)</label><input class="form-control" id="dc-suspect" placeholder="Unknown"></div>
+        <div class="form-group"><label>Summary</label><textarea class="form-control" id="dc-summary" rows="3" placeholder="Brief summary…"></textarea></div>
+        <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <input type="checkbox" id="dc-joint" style="width:auto;margin:0;">
+          <label for="dc-joint" style="margin:0;color:var(--text);cursor:pointer;">🤝 Joint Ops — visible to all departments</label>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="deptCaseCreate()">Create</button>
+        <div id="dc-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-card-header"><span class="cmd-card-icon">📂</span><div class="cmd-card-title">View Case</div></div>
+      <div class="cmd-card-body">
+        <div class="form-group"><label>Case</label>
+          <select class="form-control" id="dc-view-id">
+            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %> (<%= c.status %>)</option><% }); %>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-view',{caseId:document.getElementById('dc-view-id').value},'dc-view-result')">View</button>
+        <div id="dc-view-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-card-header"><span class="cmd-card-icon">📁</span><div class="cmd-card-title">Close Case</div></div>
+      <div class="cmd-card-body">
+        <div class="form-group"><label>Case</label>
+          <select class="form-control" id="dc-close-id">
+            <% (deptOpenCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %></option><% }); %>
+          </select>
+        </div>
+        <div class="form-group"><label>Reason</label><input class="form-control" id="dc-close-reason" placeholder="Closing reason…"></div>
+        <button class="btn btn-primary btn-sm" onclick="deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-close',{caseId:document.getElementById('dc-close-id').value,reason:document.getElementById('dc-close-reason').value},'dc-close-result')">Close Case</button>
+        <div id="dc-close-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-card-header"><span class="cmd-card-icon">📌</span><div class="cmd-card-title">Assign Case</div></div>
+      <div class="cmd-card-body">
+        <div class="form-group"><label>Case</label>
+          <select class="form-control" id="dc-assign-id">
+            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %></option><% }); %>
+          </select>
+        </div>
+        <div class="form-group"><label>Assign To</label>
+          <select class="form-control" id="dc-assign-user">
+            <% (members||[]).forEach(function(m){ %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-assign',{caseId:document.getElementById('dc-assign-id').value,userId:document.getElementById('dc-assign-user').value},'dc-assign-result')">Assign</button>
+        <div id="dc-assign-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-card-header"><span class="cmd-card-icon">📸</span><div class="cmd-card-title">Add Evidence</div></div>
+      <div class="cmd-card-body">
+        <div class="form-group"><label>Case</label>
+          <select class="form-control" id="dc-evi-id">
+            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %></option><% }); %>
+          </select>
+        </div>
+        <div class="form-group"><label>Description</label><textarea class="form-control" id="dc-evi-desc" rows="2" placeholder="Evidence details…"></textarea></div>
+        <button class="btn btn-primary btn-sm" onclick="deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/evidence-add',{caseId:document.getElementById('dc-evi-id').value,description:document.getElementById('dc-evi-desc').value},'dc-evi-result')">Add Evidence</button>
+        <div id="dc-evi-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-card-header"><span class="cmd-card-icon">🗑️</span><div class="cmd-card-title">Delete Case</div></div>
+      <div class="cmd-card-body">
+        <div class="form-group"><label>Case</label>
+          <select class="form-control" id="dc-del-id">
+            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %></option><% }); %>
+          </select>
+        </div>
+        <div class="form-group"><label>Type YES to confirm</label><input class="form-control" id="dc-del-confirm" placeholder="YES"></div>
+        <button class="btn btn-sm" style="background:#c0392b;color:#fff;border:none;" onclick="deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-delete',{caseId:document.getElementById('dc-del-id').value,confirmation:document.getElementById('dc-del-confirm').value},'dc-del-result')">🗑️ Delete</button>
+        <div id="dc-del-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
+      </div>
+    </div>
+  </div>
+</div><!-- end dtab-cases -->
+
+<!-- ─── LOA Manager tab panel ─────────────────────────────────────────────── -->
+<div id="dtab-loa" class="tab-panel">
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-header"><h3 class="card-title">🌴 Currently On LOA (<%= (usersOnLoa||[]).length %>)</h3></div>
+    <div class="card-body">
+      <% if (!(usersOnLoa||[]).length) { %>
+        <p style="color:var(--text-muted);">No members currently on LOA for this department.</p>
+      <% } else { %>
+        <% (usersOnLoa||[]).forEach(function(u){ %>
+          <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+            <span><strong><%= u.name %></strong></span>
+            <span style="font-size:12px;color:var(--text-muted);"><%= u.startDate %> → <%= u.endDate %></span>
+          </div>
+        <% }); %>
+      <% } %>
+    </div>
+  </div>
+  <div class="cmd-grid">
+    <div class="cmd-card">
+      <div class="cmd-card-header"><span class="cmd-card-icon">🌴</span><div class="cmd-card-title">Set LOA</div></div>
+      <div class="cmd-card-body">
+        <div class="form-group"><label>Member</label>
+          <select class="form-control" id="dloa-user">
+            <% (members||[]).forEach(function(m){ %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
+          </select>
+        </div>
+        <div class="form-group"><label>Start Date (MM-DD-YYYY)</label><input class="form-control" id="dloa-start" placeholder="03-01-2026"></div>
+        <div class="form-group"><label>End Date (MM-DD-YYYY)</label><input class="form-control" id="dloa-end" placeholder="03-15-2026"></div>
+        <div class="form-group"><label>Reason (optional)</label><input class="form-control" id="dloa-reason" placeholder="Vacation, medical…"></div>
+        <button class="btn btn-primary btn-sm" onclick="deptLOAAction()">Set LOA</button>
+        <div id="dloa-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
+      </div>
+    </div>
+    <% if ((usersOnLoa||[]).length > 0) { %>
+    <div class="cmd-card">
+      <div class="cmd-card-header"><span class="cmd-card-icon">✅</span><div class="cmd-card-title">End LOA</div></div>
+      <div class="cmd-card-body">
+        <div class="form-group"><label>Member</label>
+          <select class="form-control" id="dloa-end-user">
+            <% (usersOnLoa||[]).forEach(function(u){ %><option value="<%= u.id %>"><%= u.name %></option><% }); %>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/end-loa',{userId:document.getElementById('dloa-end-user').value},'dloa-end-result')">End LOA</button>
+        <div id="dloa-end-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
+      </div>
+    </div>
+    <% } %>
+  </div>
+</div><!-- end dtab-loa -->
+
+<!-- ─── View Logs tab panel ────────────────────────────────────────────────── -->
+<div id="dtab-logs" class="tab-panel">
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">⚖️ Strike Log</h3></div>
+    <div class="card-body">
+      <% if (!(deptStrikeLogs||[]).length) { %>
+        <p style="color:var(--text-muted);">No strikes on record for this department.</p>
+      <% } else { %>
+        <div style="overflow-x:auto;">
+          <table class="table" style="min-width:520px;">
+            <thead><tr><th>Member</th><th>Reason</th><th>Given By</th><th>Date</th></tr></thead>
+            <tbody>
+              <% (deptStrikeLogs||[]).forEach(function(log){ %>
+              <tr>
+                <td style="font-weight:600;color:var(--text-primary);"><%= log.name %></td>
+                <td><%= log.reason %></td>
+                <td style="font-size:12px;color:var(--text-muted);"><%= log.givenBy %></td>
+                <td style="font-size:12px;color:var(--text-muted);white-space:nowrap;"><%= log.date %></td>
+              </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+</div><!-- end dtab-logs -->
 
 <!-- ── Action modal ───────────────────────────────────────────────────────── -->
 <div class="modal-overlay" id="actionModal" data-max-strikes="<%= MAX_STRIKES %>">
@@ -220,6 +407,7 @@
     kick:    { title:'👢 Kick Member',    endpoint:'/api/guild/'+GUILD_ID+'/kick',     fields:['reason'] },
     ban:     { title:'🔨 Ban Member',     endpoint:'/api/guild/'+GUILD_ID+'/ban',      fields:['reason'] }
   };
+    ACTIONS['strike-remove'] = { title:'❌ Remove Strike', endpoint:'/api/guild/'+GUILD_ID+'/strike-remove', fields:['amount'] };
 
   function openModal(action, userId, name) {
     currentAction = action;
@@ -233,6 +421,9 @@
     if (cfg.fields.includes('reason')) {
       html += '<div class="form-group"><label>Reason</label><input class="form-control" id="mReason" type="text" placeholder="Enter reason…"></div>';
     }
+      if (cfg.fields.includes('amount')) {
+        html += '<div class="form-group"><label>Strikes to Remove</label><input class="form-control" id="mAmount" type="number" min="1" max="'+MAX_STRIKES+'" value="1"></div>';
+      }
     document.getElementById('modalFields').innerHTML = html;
     document.getElementById('modalResult').style.display = 'none';
     document.getElementById('actionModal').classList.add('open');
@@ -251,6 +442,10 @@
     if (minutesEl) body.minutes = minutesEl.value;
 
     if (!body.reason && cfg.fields.includes('reason')) {
+      var amountEl = document.getElementById('mAmount');
+      if (amountEl)  body.amount  = amountEl.value;
+
+      if (!body.reason && cfg.fields.includes('reason')) {
       showModalResult('error', 'Please enter a reason.');
       return;
     }
@@ -298,6 +493,58 @@
   document.getElementById('actionModal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
   });
+
+    // ── Department tab switching ──────────────────────────────────────────────
+    var DEPT_GUILD_ID = '<%= guildId %>';
+    document.querySelectorAll('.tab-btn[data-dtab]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.tab-btn[data-dtab]').forEach(function(b){ b.classList.remove('active'); });
+        document.querySelectorAll('#dtab-members,#dtab-cases,#dtab-loa,#dtab-logs').forEach(function(p){ p.classList.remove('active'); });
+        this.classList.add('active');
+        var panel = document.getElementById(this.dataset.dtab);
+        if (panel) panel.classList.add('active');
+      });
+    });
+
+    // ── Department AJAX helper ────────────────────────────────────────────────
+    async function deptCaseAction(endpoint, body, resultId) {
+      var el = document.getElementById(resultId);
+      if (el) el.style.display = 'none';
+      try {
+        var r = await fetch(endpoint, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+        var d = await r.json();
+        if (el) {
+          el.style.display = 'block';
+          el.style.color = d.success ? '#2ecc71' : '#e74c3c';
+          el.style.background = d.success ? 'rgba(46,204,113,.12)' : 'rgba(231,76,60,.12)';
+          el.style.border = '1px solid ' + (d.success ? '#2ecc7150' : '#e74c3c50');
+          el.textContent = d.message || d.error || (d.success ? 'Done!' : 'Something went wrong.');
+        }
+      } catch(e) {
+        if (el) { el.style.display='block'; el.style.color='#e74c3c'; el.textContent='Request failed: '+e.message; }
+      }
+    }
+
+    function deptCaseCreate() {
+      var joint = document.getElementById('dc-joint') && document.getElementById('dc-joint').checked;
+      deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-create', {
+        title:        document.getElementById('dc-title').value,
+        incidentType: document.getElementById('dc-type').value,
+        location:     document.getElementById('dc-loc').value,
+        suspect:      document.getElementById('dc-suspect').value,
+        summary:      document.getElementById('dc-summary').value,
+        jointOps:     joint ? 'true' : 'false'
+      }, 'dc-result');
+    }
+
+    function deptLOAAction() {
+      deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/loa', {
+        userId:    document.getElementById('dloa-user').value,
+        startDate: document.getElementById('dloa-start').value,
+        endDate:   document.getElementById('dloa-end').value,
+        reason:    document.getElementById('dloa-reason') ? document.getElementById('dloa-reason').value : ''
+      }, 'dloa-result');
+    }
 </script>
 
 <%- include('partials/footer') %>

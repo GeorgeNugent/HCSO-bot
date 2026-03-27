@@ -175,6 +175,8 @@ export function startDashboard(context) {
         patrols:              context.patrols,
         loa:                  context.loa,
         casesData:            context.casesData
+        saveCases:            context.saveCases,
+        saveLOA:              context.saveLOA
     }));
 
     // ── 404 fallback ─────────────────────────────────────────────────────────
