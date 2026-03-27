@@ -1330,18 +1330,26 @@ try {
     await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
     console.log(`Registered ${commands.length} application commands.`);
 
-    // Register onlinedash as a guild command for instant availability in the main server.
-    if (GUILD_ID) {
-        const guildQuickCommands = [
-            new SlashCommandBuilder()
-                .setName("onlinedash")
-                .setDescription("Post the web dashboard link in chat")
-                .toJSON()
-        ];
-        await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: guildQuickCommands });
-        console.log("Registered guild quick command: /onlinedash");
+    // Register onlinedash as a guild command for instant availability in known servers.
+    const guildQuickCommands = [
+        new SlashCommandBuilder()
+            .setName("onlinedash")
+            .setDescription("Post the web dashboard link in chat")
+            .toJSON()
+    ];
+    const quickGuildIds = Array.from(new Set([
+        GUILD_ID,
+        "1482203107432595601", // HCSO
+        "1318018654515888138"  // Main server
+    ].filter(Boolean)));
+
+    if (quickGuildIds.length === 0) {
+        console.warn("No guild IDs available for /onlinedash quick command registration.");
     } else {
-        console.warn("GUILD_ID is not set; skipped guild quick command registration for /onlinedash.");
+        for (const guildId of quickGuildIds) {
+            await rest.put(Routes.applicationGuildCommands(CLIENT_ID, guildId), { body: guildQuickCommands });
+            console.log(`Registered guild quick command /onlinedash for guild ${guildId}`);
+        }
     }
 } catch (error) {
     console.error("Failed to register application commands:", error);
