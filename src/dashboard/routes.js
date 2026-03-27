@@ -81,6 +81,30 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         }
     }
 
+    function normalizeCaseId(caseId) {
+        return String(caseId || "").trim().toUpperCase();
+    }
+
+    function isCaseClosed(entry) {
+        if (!entry) return false;
+        if (typeof entry.closed === "boolean") return entry.closed;
+        return String(entry.status || "").trim().toLowerCase() === "closed";
+    }
+
+    function setCaseStatus(entry, closed) {
+        entry.status = closed ? "Closed" : "Open";
+        entry.closed = closed;
+    }
+
+    function ensureCaseCounter() {
+        const current = Number(casesData.caseCounter) || 0;
+        const discoveredMax = Object.keys(casesData.cases || {}).reduce((max, id) => {
+            const m = /^CASE-(\d+)$/.exec(String(id).toUpperCase());
+            return m ? Math.max(max, Number(m[1]) || 0) : max;
+        }, 0);
+        casesData.caseCounter = Math.max(current, discoveredMax);
+    }
+
     // ── Public ────────────────────────────────────────────────────────────────
     router.get("/health", (req, res) => res.send("OK"));
 
@@ -167,10 +191,17 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             }
         }
 
-        const openCases = Object.entries(casesData.cases || {})
-            .filter(([, c]) => c.status !== "closed")
-            .map(([id, c]) => ({ id, title: c.title || id }))
-            .slice(0, 100);
+        const allCases = Object.entries(casesData.cases || {})
+            .map(([id, c]) => ({
+                id,
+                title: c.title || id,
+                status: c.status || (isCaseClosed(c) ? "Closed" : "Open"),
+                createdAt: c.createdAt || null,
+            }))
+            .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+            .slice(0, 500);
+
+        const openCases = allCases.filter(c => String(c.status).toLowerCase() !== "closed").slice(0, 100);
 
         const usersOnLoa = Object.entries(loa)
             .filter(([, d]) => d.onLOA)
@@ -184,6 +215,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             members,
             channels,
             openCases,
+            allCases,
             usersOnLoa
         });
     });
@@ -722,20 +754,266 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         }
     });
 
-    // ── API: Case Close ───────────────────────────────────────────────────────
-    router.post("/api/commands/case-close", requireStaff, segmentGuard("commands"), async (req, res) => {
+    // ── API: Case Create ──────────────────────────────────────────────────────
+    router.post("/api/commands/case-create", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const { caseId, reason } = req.body;
+            const title = String(req.body.title || "").trim();
+            const incidentType = String(req.body.incidentType || "").trim();
+            const location = String(req.body.location || "").trim();
+            const suspect = String(req.body.suspect || "").trim() || "Unknown";
+            const summary = String(req.body.summary || "").trim();
+
+            if (!title || !incidentType || !location || !summary) {
+                return res.status(400).json({ error: "Missing required case fields" });
+            }
+
+            ensureCaseCounter();
+            casesData.caseCounter += 1;
+            const caseId = `CASE-${String(casesData.caseCounter).padStart(6, "0")}`;
+
+            casesData.cases[caseId] = {
+                caseId,
+                title,
+                incidentType,
+                location,
+                suspect,
+                summary,
+                createdBy: req.session.user.id,
+                assignedTo: null,
+                evidence: [],
+                status: "Open",
+                closed: false,
+                createdAt: new Date().toISOString(),
+            };
+            saveCases();
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "case",
+                title: "📁 Dashboard Case Created",
+                fields: [
+                    { name: "Case ID", value: caseId, inline: true },
+                    { name: "Filed By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Title", value: title, inline: false },
+                    { name: "Incident Type", value: incidentType, inline: true },
+                    { name: "Location", value: location, inline: true },
+                    { name: "Suspect", value: suspect, inline: false }
+                ],
+                color: 0x23A559
+            });
+
+            res.json({ success: true, caseId, message: `Case created: ${caseId}` });
+        } catch (err) {
+            console.error("[Dashboard API] case-create:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Case View ────────────────────────────────────────────────────────
+    router.post("/api/commands/case-view", requireStaff, segmentGuard("commands"), async (req, res) => {
+        try {
+            const caseId = normalizeCaseId(req.body.caseId);
             if (!caseId) return res.status(400).json({ error: "Missing caseId" });
 
             const entry = casesData.cases?.[caseId];
             if (!entry) return res.status(404).json({ error: "Case not found" });
 
-            entry.status      = "closed";
-            entry.closedAt    = new Date().toISOString();
-            entry.closedBy    = req.session.user.id;
-            if (reason) entry.closeReason = reason;
+            const evidenceCount = Array.isArray(entry.evidence) ? entry.evidence.length : 0;
+            const assignedText = entry.assignedTo ? `<@${entry.assignedTo}>` : "Unassigned";
+            const statusText = isCaseClosed(entry) ? "Closed" : "Open";
+
+            res.json({
+                success: true,
+                message: `${caseId} | ${statusText} | Assigned: ${assignedText} | Evidence: ${evidenceCount}`,
+                case: entry
+            });
+        } catch (err) {
+            console.error("[Dashboard API] case-view:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Case Search ──────────────────────────────────────────────────────
+    router.post("/api/commands/case-search", requireStaff, segmentGuard("commands"), async (req, res) => {
+        try {
+            const query = String(req.body.query || "").trim().toLowerCase();
+            if (!query) return res.status(400).json({ error: "Missing search query" });
+
+            const results = Object.values(casesData.cases || {}).filter(c => {
+                const fields = [
+                    c.caseId,
+                    c.title,
+                    c.suspect,
+                    c.location,
+                    c.incidentType,
+                    c.summary
+                ];
+                return fields.some(v => String(v || "").toLowerCase().includes(query));
+            });
+
+            const summary = results
+                .slice(0, 10)
+                .map(c => `${c.caseId || "UNKNOWN"} - ${c.title || "Untitled"} (${isCaseClosed(c) ? "Closed" : "Open"})`)
+                .join("; ");
+
+            res.json({
+                success: true,
+                count: results.length,
+                message: results.length
+                    ? `Found ${results.length} case(s). ${summary}`
+                    : `No cases found for "${query}".`,
+                results: results.slice(0, 50)
+            });
+        } catch (err) {
+            console.error("[Dashboard API] case-search:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Case Assign ──────────────────────────────────────────────────────
+    router.post("/api/commands/case-assign", requireStaff, segmentGuard("commands"), async (req, res) => {
+        try {
+            const caseId = normalizeCaseId(req.body.caseId);
+            const userId = String(req.body.userId || "").trim();
+            const note = String(req.body.note || "").trim() || "No note provided";
+
+            if (!caseId || !userId) return res.status(400).json({ error: "Missing caseId or userId" });
+
+            const entry = casesData.cases?.[caseId];
+            if (!entry) return res.status(404).json({ error: "Case not found" });
+
+            entry.assignedTo = userId;
+            entry.assignedBy = req.session.user.id;
+            entry.assignNote = note;
+            entry.assignedAt = new Date().toISOString();
             saveCases();
+
+            await client.users.fetch(userId).then(u => u.send(`You have been assigned to case ${caseId}.`)).catch(() => {});
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "case",
+                title: "📌 Dashboard Case Assigned",
+                fields: [
+                    { name: "Case ID", value: caseId, inline: true },
+                    { name: "Assigned To", value: `<@${userId}>`, inline: true },
+                    { name: "Assigned By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Note", value: note, inline: false }
+                ],
+                color: 0x3B82F6
+            });
+
+            res.json({ success: true, message: `Case assigned: ${caseId}` });
+        } catch (err) {
+            console.error("[Dashboard API] case-assign:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Case Unassign ────────────────────────────────────────────────────
+    router.post("/api/commands/case-unassign", requireStaff, segmentGuard("commands"), async (req, res) => {
+        try {
+            const caseId = normalizeCaseId(req.body.caseId);
+            const reason = String(req.body.reason || "").trim() || "Not specified";
+            if (!caseId) return res.status(400).json({ error: "Missing caseId" });
+
+            const entry = casesData.cases?.[caseId];
+            if (!entry) return res.status(404).json({ error: "Case not found" });
+            if (!entry.assignedTo) return res.status(400).json({ error: "Case is not assigned" });
+
+            const previousAssignee = entry.assignedTo;
+            entry.assignedTo = null;
+            entry.unassignedBy = req.session.user.id;
+            entry.unassignReason = reason;
+            entry.unassignedAt = new Date().toISOString();
+            saveCases();
+
+            await client.users.fetch(previousAssignee).then(u => u.send(`You have been unassigned from case ${caseId}. Reason: ${reason}`)).catch(() => {});
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "case",
+                title: "📌 Dashboard Case Unassigned",
+                fields: [
+                    { name: "Case ID", value: caseId, inline: true },
+                    { name: "Unassigned User", value: `<@${previousAssignee}>`, inline: true },
+                    { name: "Action By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Reason", value: reason, inline: false }
+                ],
+                color: 0xE8A020
+            });
+
+            res.json({ success: true, message: `Case unassigned: ${caseId}` });
+        } catch (err) {
+            console.error("[Dashboard API] case-unassign:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Evidence Add ─────────────────────────────────────────────────────
+    router.post("/api/commands/evidence-add", requireStaff, segmentGuard("commands"), async (req, res) => {
+        try {
+            const caseId = normalizeCaseId(req.body.caseId);
+            const description = String(req.body.description || "").trim();
+            if (!caseId || !description) return res.status(400).json({ error: "Missing caseId or description" });
+
+            const entry = casesData.cases?.[caseId];
+            if (!entry) return res.status(404).json({ error: "Case not found" });
+
+            const evidenceId = `EVI-${Date.now()}`;
+            if (!Array.isArray(entry.evidence)) entry.evidence = [];
+            entry.evidence.push({
+                evidenceId,
+                description,
+                officerId: req.session.user.id,
+                timestamp: new Date().toISOString(),
+            });
+            saveCases();
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "case",
+                title: "📸 Dashboard Evidence Added",
+                fields: [
+                    { name: "Case ID", value: caseId, inline: true },
+                    { name: "Evidence ID", value: evidenceId, inline: true },
+                    { name: "Added By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Description", value: description, inline: false }
+                ],
+                color: 0x5865F2
+            });
+
+            res.json({ success: true, evidenceId, message: `Evidence added to ${caseId}` });
+        } catch (err) {
+            console.error("[Dashboard API] evidence-add:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Case Close ───────────────────────────────────────────────────────
+    router.post("/api/commands/case-close", requireStaff, segmentGuard("commands"), async (req, res) => {
+        try {
+            const caseId = normalizeCaseId(req.body.caseId);
+            const reason = String(req.body.reason || "").trim();
+            if (!caseId) return res.status(400).json({ error: "Missing caseId" });
+
+            const entry = casesData.cases?.[caseId];
+            if (!entry) return res.status(404).json({ error: "Case not found" });
+
+            if (isCaseClosed(entry)) return res.status(400).json({ error: "Case is already closed" });
+
+            setCaseStatus(entry, true);
+            entry.closedAt = new Date().toISOString();
+            entry.closedBy = req.session.user.id;
+            if (reason) {
+                entry.closeReason = reason;
+                entry.closedReason = reason;
+            }
+            saveCases();
+
+            if (entry.assignedTo) {
+                await client.users.fetch(entry.assignedTo).then(u => u.send(`Case ${caseId} has been closed. Reason: ${reason || "No reason"}`)).catch(() => {});
+            }
 
             await sendDashboardActionLog({
                 guildId: GUILD_ID,
@@ -749,9 +1027,140 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
                 color: 0xE8A020
             });
 
-            res.json({ success: true });
+            res.json({ success: true, message: `Case closed: ${caseId}` });
         } catch (err) {
             console.error("[Dashboard API] case-close:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Case Reopen ──────────────────────────────────────────────────────
+    router.post("/api/commands/case-reopen", requireStaff, segmentGuard("commands"), async (req, res) => {
+        try {
+            const caseId = normalizeCaseId(req.body.caseId);
+            const reason = String(req.body.reason || "").trim();
+            if (!caseId) return res.status(400).json({ error: "Missing caseId" });
+
+            const entry = casesData.cases?.[caseId];
+            if (!entry) return res.status(404).json({ error: "Case not found" });
+            if (!isCaseClosed(entry)) return res.status(400).json({ error: "Case is not closed" });
+
+            setCaseStatus(entry, false);
+            entry.reopenedBy = req.session.user.id;
+            entry.reopenReason = reason || "No reason provided";
+            entry.reopenedAt = new Date().toISOString();
+            saveCases();
+
+            if (entry.assignedTo) {
+                await client.users.fetch(entry.assignedTo).then(u => u.send(`Case ${caseId} has been reopened. Reason: ${reason || "No reason"}`)).catch(() => {});
+            }
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "case",
+                title: "🔓 Dashboard Case Reopened",
+                fields: [
+                    { name: "Case ID", value: caseId, inline: true },
+                    { name: "Reopened By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Reason", value: reason || "No reason", inline: false }
+                ],
+                color: 0x23A559
+            });
+
+            res.json({ success: true, message: `Case reopened: ${caseId}` });
+        } catch (err) {
+            console.error("[Dashboard API] case-reopen:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Case Delete ──────────────────────────────────────────────────────
+    router.post("/api/commands/case-delete", requireStaff, segmentGuard("commands"), async (req, res) => {
+        try {
+            const caseId = normalizeCaseId(req.body.caseId);
+            const confirmation = String(req.body.confirmation || "").trim().toUpperCase();
+            if (!caseId) return res.status(400).json({ error: "Missing caseId" });
+
+            if (confirmation !== "YES") {
+                return res.status(400).json({ error: "Deletion cancelled. Type YES to confirm." });
+            }
+
+            const entry = casesData.cases?.[caseId];
+            if (!entry) return res.status(404).json({ error: "Case not found" });
+
+            delete casesData.cases[caseId];
+            saveCases();
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "case",
+                title: "🗑️ Dashboard Case Deleted",
+                fields: [
+                    { name: "Case ID", value: caseId, inline: true },
+                    { name: "Deleted By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Title", value: entry.title || "Unknown", inline: false }
+                ],
+                color: 0xE03C3C
+            });
+
+            res.json({ success: true, message: `Case deleted: ${caseId}` });
+        } catch (err) {
+            console.error("[Dashboard API] case-delete:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── API: Case Edit ────────────────────────────────────────────────────────
+    router.post("/api/commands/case-edit", requireStaff, segmentGuard("commands"), async (req, res) => {
+        try {
+            const caseId = normalizeCaseId(req.body.caseId);
+            const field = String(req.body.field || "").trim();
+            const value = String(req.body.value || "").trim();
+            if (!caseId || !field) return res.status(400).json({ error: "Missing caseId or field" });
+
+            const entry = casesData.cases?.[caseId];
+            if (!entry) return res.status(404).json({ error: "Case not found" });
+
+            const allowedFields = new Set(["title", "incidentType", "location", "suspect", "summary", "status", "assignedTo"]);
+            if (!allowedFields.has(field)) {
+                return res.status(400).json({ error: "Invalid field" });
+            }
+
+            const oldValue = entry[field] == null ? "N/A" : String(entry[field]);
+            if (field === "assignedTo") {
+                entry.assignedTo = value ? value.replace(/[<@!>]/g, "") : null;
+            } else if (field === "status") {
+                const normalized = value.toLowerCase();
+                if (normalized !== "open" && normalized !== "closed") {
+                    return res.status(400).json({ error: "Status must be Open or Closed" });
+                }
+                setCaseStatus(entry, normalized === "closed");
+            } else {
+                if (!value) return res.status(400).json({ error: "Value cannot be empty" });
+                entry[field] = value;
+            }
+
+            entry.lastEditedBy = req.session.user.id;
+            entry.lastEditedAt = new Date().toISOString();
+            saveCases();
+
+            await sendDashboardActionLog({
+                guildId: GUILD_ID,
+                logType: "case",
+                title: "✏️ Dashboard Case Updated",
+                fields: [
+                    { name: "Case ID", value: caseId, inline: true },
+                    { name: "Field", value: field, inline: true },
+                    { name: "Updated By", value: `<@${req.session.user.id}>`, inline: true },
+                    { name: "Old Value", value: oldValue.slice(0, 200), inline: false },
+                    { name: "New Value", value: String(entry[field] ?? value).slice(0, 200) || "N/A", inline: false }
+                ],
+                color: 0x5865F2
+            });
+
+            res.json({ success: true, message: `Case updated: ${caseId}` });
+        } catch (err) {
+            console.error("[Dashboard API] case-edit:", err.message);
             res.status(500).json({ error: err.message });
         }
     });

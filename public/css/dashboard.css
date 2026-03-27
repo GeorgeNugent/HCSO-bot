@@ -27,6 +27,7 @@ body {
   color: var(--text);
   font-size: 14px;
   line-height: 1.5;
+  overflow-x: hidden;
 }
 
 a { color: inherit; text-decoration: none; }
@@ -66,6 +67,13 @@ code {
 
 .topbar-title {
   font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.topbar-title-short {
+  display: none;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text);
 }
@@ -168,6 +176,7 @@ code {
   flex: 1;
   padding: 28px 28px 40px;
   max-width: 1200px;
+  width: min(100%, 1200px);
 }
 
 /* ── Page Header ────────────────────────────────────────────── */
@@ -232,6 +241,7 @@ code {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 8px 16px;
+  min-height: 40px;
   font-size: 13px;
   font-weight: 500;
   transition: background 0.15s, border-color 0.15s;
@@ -280,6 +290,19 @@ code {
 .btn:hover { filter: brightness(1.12); }
 .btn:active { filter: brightness(0.9); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn:focus-visible,
+.nav-link:focus-visible,
+.tab-btn:focus-visible,
+.quick-btn:focus-visible,
+.cmd-form input:focus-visible,
+.cmd-form select:focus-visible,
+.cmd-form textarea:focus-visible,
+.filter-chip:focus-visible,
+.page-btn:focus-visible {
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
+}
 
 .btn-discord {
   background: #5865f2;
@@ -643,10 +666,161 @@ code {
   fill: #fff;
 }
 
+/* ── Hamburger button (hidden on desktop) ────────────────────── */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 36px;
+  height: 36px;
+  padding: 8px 6px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.hamburger:hover { background: var(--surface2); }
+
+.hamburger span {
+  display: block;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+  transition: transform 0.22s ease, opacity 0.15s ease;
+  transform-origin: center;
+}
+
+/* Animate to X when open */
+.hamburger--open span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.hamburger--open span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+.hamburger--open span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+/* ── Sidebar overlay backdrop ────────────────────────────────── */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 99;
+  backdrop-filter: blur(1px);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.sidebar-overlay--visible {
+  display: block;
+  opacity: 1;
+}
+
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .sidebar { display: none; }
-  .main-content { margin-left: 0; padding: 16px; }
+  /* Topbar back to a single compact row */
+  .topbar {
+    flex-direction: row;
+    align-items: center;
+    height: var(--topbar-h);
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  .hamburger {
+    display: flex;
+    order: -1;
+  }
+
+  .topbar-brand {
+    flex: 1;
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .topbar-avatar {
+    width: 26px;
+    height: 26px;
+    flex: 0 0 auto;
+  }
+
+  .topbar-title {
+    display: none;
+  }
+
+  .topbar-title-short {
+    display: inline;
+  }
+
+  .topbar-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+  }
+
+  .topbar-user {
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .topbar-user-avatar {
+    width: 24px;
+    height: 24px;
+  }
+
+  .topbar-username {
+    display: none; /* hide on small screens to save space */
+  }
+
+  .topbar-user .btn {
+    min-height: 36px;
+    padding: 7px 12px;
+  }
+
+  /* Sidebar slides in over content */
+  .sidebar {
+    display: flex;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: none;
+  }
+
+  .sidebar--open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0,0,0,0.5);
+  }
+
+  .main-content {
+    margin-left: 0;
+    padding: 14px 12px calc(24px + env(safe-area-inset-bottom));
+  }
+
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .cmd-grid { grid-template-columns: 1fr; }
+
+  .section-card { padding: 16px; }
+
+  .quick-grid { gap: 10px; }
+
+  .quick-btn {
+    min-height: 42px;
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  #toast-container {
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .toast { max-width: 100%; }
+}
+
+@media (max-width: 420px) {
+  .stats-grid { grid-template-columns: 1fr; }
+
+  .tab-btn {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
 }

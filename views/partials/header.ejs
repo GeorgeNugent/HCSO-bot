@@ -14,13 +14,20 @@
 </head>
 <body>
 
+<!-- Mobile nav overlay (click to close sidebar) -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
 <!-- Top Navigation Bar -->
 <header class="topbar">
+  <button class="hamburger" id="hamburgerBtn" aria-label="Open navigation" aria-expanded="false" aria-controls="mainSidebar">
+    <span></span><span></span><span></span>
+  </button>
   <div class="topbar-brand">
     <% if (botAvatar) { %>
       <img src="<%= botAvatar %>" alt="" class="topbar-avatar" onerror="this.style.display='none'">
     <% } %>
-    <span class="tp-logo">🌴 Twin Palms Roleplay</span>
+    <span class="tp-logo topbar-title">🌴 Twin Palms Roleplay</span>
+    <span class="tp-logo topbar-title-short">🌴 Twin Palms</span>
     <span class="topbar-badge">Control Panel</span>
   </div>
   <div class="topbar-user">
@@ -35,7 +42,7 @@
 <div class="layout">
 
   <!-- Sidebar -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="mainSidebar">
     <nav class="sidebar-nav">
       <div class="sidebar-section-label">Main</div>
       <% if (!segmentAccess || segmentAccess.home) { %>
@@ -111,3 +118,46 @@
 
   <!-- Main content starts here — closed in footer.ejs -->
   <main class="main-content">
+
+<script>
+(function() {
+  var btn      = document.getElementById('hamburgerBtn');
+  var sidebar  = document.getElementById('mainSidebar');
+  var overlay  = document.getElementById('sidebarOverlay');
+  if (!btn || !sidebar || !overlay) return;
+
+  function openNav() {
+    sidebar.classList.add('sidebar--open');
+    overlay.classList.add('sidebar-overlay--visible');
+    btn.setAttribute('aria-expanded', 'true');
+    btn.classList.add('hamburger--open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeNav() {
+    sidebar.classList.remove('sidebar--open');
+    overlay.classList.remove('sidebar-overlay--visible');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.classList.remove('hamburger--open');
+    document.body.style.overflow = '';
+  }
+
+  btn.addEventListener('click', function() {
+    sidebar.classList.contains('sidebar--open') ? closeNav() : openNav();
+  });
+
+  overlay.addEventListener('click', closeNav);
+
+  // Close sidebar when a nav link is tapped on mobile
+  sidebar.querySelectorAll('.nav-link').forEach(function(link) {
+    link.addEventListener('click', function() {
+      if (window.innerWidth <= 768) closeNav();
+    });
+  });
+
+  // Close if window resizes past breakpoint
+  window.addEventListener('resize', function() {
+    if (window.innerWidth > 768) closeNav();
+  });
+}());
+</script>

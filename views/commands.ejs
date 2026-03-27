@@ -172,6 +172,142 @@
 <div class="tab-panel" id="tab-cases">
   <div class="cmd-grid">
 
+    <!-- Create case -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">🆕 Create Case</h4>
+      <form class="cmd-form" data-endpoint="/api/commands/case-create">
+        <label>Title</label>
+        <input type="text" name="title" maxlength="128" placeholder="Case title" required>
+        <label>Incident Type</label>
+        <input type="text" name="incidentType" maxlength="128" placeholder="Traffic stop, robbery, etc." required>
+        <label>Location</label>
+        <input type="text" name="location" maxlength="128" placeholder="Incident location" required>
+        <label>Suspect</label>
+        <input type="text" name="suspect" maxlength="128" placeholder="Suspect name (optional)">
+        <label>Summary</label>
+        <textarea name="summary" rows="4" maxlength="1200" placeholder="Case summary" required></textarea>
+        <button type="submit" class="btn btn-success">Create Case</button>
+      </form>
+    </div>
+
+    <!-- View case -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">📂 View Case</h4>
+      <% if (allCases.length === 0) { %>
+        <p class="empty-state">No cases found.</p>
+      <% } else { %>
+      <form class="cmd-form" data-endpoint="/api/commands/case-view">
+        <label>Case</label>
+        <select name="caseId" required>
+          <option value="">— Select case —</option>
+          <% allCases.forEach(c => { %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %> (<%= c.status %>)</option><% }); %>
+        </select>
+        <button type="submit" class="btn btn-info">View Case</button>
+      </form>
+      <% } %>
+    </div>
+
+    <!-- Search cases -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">🔎 Search Cases</h4>
+      <form class="cmd-form" data-endpoint="/api/commands/case-search">
+        <label>Search Query</label>
+        <input type="text" name="query" maxlength="128" placeholder="ID, title, suspect, location..." required>
+        <button type="submit" class="btn btn-info">Search</button>
+      </form>
+    </div>
+
+    <!-- Assign case -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">📌 Assign Case</h4>
+      <% if (allCases.length === 0) { %>
+        <p class="empty-state">No cases found.</p>
+      <% } else { %>
+      <form class="cmd-form" data-endpoint="/api/commands/case-assign">
+        <label>Case</label>
+        <select name="caseId" required>
+          <option value="">— Select case —</option>
+          <% allCases.forEach(c => { %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %> (<%= c.status %>)</option><% }); %>
+        </select>
+        <label>Assign To</label>
+        <select name="userId" required>
+          <option value="">— Select member —</option>
+          <% members.forEach(m => { %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
+        </select>
+        <label>Note (optional)</label>
+        <input type="text" name="note" maxlength="512" placeholder="Assignment note">
+        <button type="submit" class="btn btn-success">Assign</button>
+      </form>
+      <% } %>
+    </div>
+
+    <!-- Unassign case -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">📎 Unassign Case</h4>
+      <% if (allCases.length === 0) { %>
+        <p class="empty-state">No cases found.</p>
+      <% } else { %>
+      <form class="cmd-form" data-endpoint="/api/commands/case-unassign">
+        <label>Case</label>
+        <select name="caseId" required>
+          <option value="">— Select case —</option>
+          <% allCases.forEach(c => { %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %> (<%= c.status %>)</option><% }); %>
+        </select>
+        <label>Reason</label>
+        <input type="text" name="reason" maxlength="512" placeholder="Reason for unassigning">
+        <button type="submit" class="btn btn-warn">Unassign</button>
+      </form>
+      <% } %>
+    </div>
+
+    <!-- Add evidence -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">📸 Add Evidence</h4>
+      <% if (allCases.length === 0) { %>
+        <p class="empty-state">No cases found.</p>
+      <% } else { %>
+      <form class="cmd-form" data-endpoint="/api/commands/evidence-add">
+        <label>Case</label>
+        <select name="caseId" required>
+          <option value="">— Select case —</option>
+          <% allCases.forEach(c => { %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %> (<%= c.status %>)</option><% }); %>
+        </select>
+        <label>Description</label>
+        <textarea name="description" rows="4" maxlength="1000" placeholder="Evidence details" required></textarea>
+        <button type="submit" class="btn btn-info">Add Evidence</button>
+      </form>
+      <% } %>
+    </div>
+
+    <!-- Edit case -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">✏️ Edit Case</h4>
+      <% if (allCases.length === 0) { %>
+        <p class="empty-state">No cases found.</p>
+      <% } else { %>
+      <form class="cmd-form" data-endpoint="/api/commands/case-edit">
+        <label>Case</label>
+        <select name="caseId" required>
+          <option value="">— Select case —</option>
+          <% allCases.forEach(c => { %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %> (<%= c.status %>)</option><% }); %>
+        </select>
+        <label>Field</label>
+        <select name="field" required>
+          <option value="title">Title</option>
+          <option value="incidentType">Incident Type</option>
+          <option value="location">Location</option>
+          <option value="suspect">Suspect</option>
+          <option value="summary">Summary</option>
+          <option value="status">Status (Open/Closed)</option>
+          <option value="assignedTo">Assigned To (User ID)</option>
+        </select>
+        <label>Value</label>
+        <input type="text" name="value" maxlength="1200" placeholder="New value" required>
+        <button type="submit" class="btn btn-info">Update Case</button>
+      </form>
+      <% } %>
+    </div>
+
     <!-- Close case -->
     <div class="cmd-card">
       <h4 class="cmd-title">📁 Close Case</h4>
@@ -187,6 +323,44 @@
         <label>Closing reason (optional)</label>
         <input type="text" name="reason" maxlength="512" placeholder="Reason for closing">
         <button type="submit" class="btn btn-warn">Close Case</button>
+      </form>
+      <% } %>
+    </div>
+
+    <!-- Reopen case -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">🔓 Reopen Case</h4>
+      <% if (allCases.length === 0) { %>
+        <p class="empty-state">No cases found.</p>
+      <% } else { %>
+      <form class="cmd-form" data-endpoint="/api/commands/case-reopen">
+        <label>Case</label>
+        <select name="caseId" required>
+          <option value="">— Select case —</option>
+          <% allCases.forEach(c => { %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %> (<%= c.status %>)</option><% }); %>
+        </select>
+        <label>Reason</label>
+        <input type="text" name="reason" maxlength="512" placeholder="Reason for reopening" required>
+        <button type="submit" class="btn btn-success">Reopen Case</button>
+      </form>
+      <% } %>
+    </div>
+
+    <!-- Delete case -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">🗑️ Delete Case</h4>
+      <% if (allCases.length === 0) { %>
+        <p class="empty-state">No cases found.</p>
+      <% } else { %>
+      <form class="cmd-form" data-endpoint="/api/commands/case-delete">
+        <label>Case</label>
+        <select name="caseId" required>
+          <option value="">— Select case —</option>
+          <% allCases.forEach(c => { %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %> (<%= c.status %>)</option><% }); %>
+        </select>
+        <label>Type YES to confirm</label>
+        <input type="text" name="confirmation" maxlength="3" placeholder="YES" required>
+        <button type="submit" class="btn btn-danger">Delete Case</button>
       </form>
       <% } %>
     </div>

@@ -57,7 +57,7 @@ async function submitForm(form) {
         const data = await res.json();
 
         if (data.success) {
-            const msg = buildSuccessMessage(endpoint, data);
+            const msg = data.message || buildSuccessMessage(endpoint, data);
             resultEl.textContent = "✅ " + msg;
             resultEl.classList.add("result-success");
             resultEl.style.display = "block";
@@ -88,6 +88,15 @@ async function submitForm(form) {
 }
 
 function buildSuccessMessage(endpoint, data) {
+    if (endpoint.includes("case-create"))   return data.caseId ? `Case created: ${data.caseId}.` : "Case created.";
+    if (endpoint.includes("case-view"))     return "Case loaded.";
+    if (endpoint.includes("case-search"))   return `Found ${data.count || 0} case(s).`;
+    if (endpoint.includes("case-assign"))   return "Case assigned.";
+    if (endpoint.includes("case-unassign")) return "Case unassigned.";
+    if (endpoint.includes("evidence-add"))  return data.evidenceId ? `Evidence added (${data.evidenceId}).` : "Evidence added.";
+    if (endpoint.includes("case-reopen"))   return "Case reopened.";
+    if (endpoint.includes("case-delete"))   return "Case deleted.";
+    if (endpoint.includes("case-edit"))     return "Case updated.";
     if (endpoint.includes("strike-remove")) return `Removed ${data.removed} strike(s). Now has ${data.totalStrikes}.`;
     if (endpoint.includes("strike"))        return `Strike added. Total: ${data.totalStrikes}.`;
     if (endpoint.includes("purge"))         return `Deleted ${data.deleted} message(s).`;
