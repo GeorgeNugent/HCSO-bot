@@ -122,10 +122,10 @@
             <td style="font-size:12px;color:var(--text-muted);"><%= m.joinedAt %></td>
             <td>
               <div class="action-btns">
-                <button class="btn btn-sm btn-strike"  onclick="openModal('strike','<%= m.id %>','<%= m.name.replace(/'/g,&quot;&#39;&quot;) %>')">⚖️ Strike</button>
-                <button class="btn btn-sm btn-timeout" onclick="openModal('timeout','<%= m.id %>','<%= m.name.replace(/'/g,&quot;&#39;&quot;) %>')">⏱ Timeout</button>
-                <button class="btn btn-sm btn-kick"    onclick="openModal('kick','<%= m.id %>','<%= m.name.replace(/'/g,&quot;&#39;&quot;) %>')">👢 Kick</button>
-                <button class="btn btn-sm btn-ban"     onclick="openModal('ban','<%= m.id %>','<%= m.name.replace(/'/g,&quot;&#39;&quot;) %>')">🔨 Ban</button>
+                <button class="btn btn-sm btn-strike"  data-action="strike"  data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">⚖️ Strike</button>
+                <button class="btn btn-sm btn-timeout" data-action="timeout" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">⏱ Timeout</button>
+                <button class="btn btn-sm btn-kick"    data-action="kick"    data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">👢 Kick</button>
+                <button class="btn btn-sm btn-ban"     data-action="ban"     data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">🔨 Ban</button>
               </div>
             </td>
           </tr>
@@ -142,7 +142,7 @@
 </div>
 
 <!-- ── Action modal ───────────────────────────────────────────────────────── -->
-<div class="modal-overlay" id="actionModal">
+<div class="modal-overlay" id="actionModal" data-max-strikes="<%= MAX_STRIKES %>">
   <div class="modal-box">
     <h3 class="modal-title" id="modalTitle">Action</h3>
     <div id="modalFields"></div>
@@ -156,6 +156,7 @@
 
 <script>
   var GUILD_ID = '<%= guildId %>';
+  var MAX_STRIKES = parseInt(document.getElementById('actionModal').dataset.maxStrikes, 10);
   var currentAction = null;
   var currentUserId = null;
 
@@ -212,7 +213,7 @@
       });
       var data = await res.json();
       if (data.success) {
-        showModalResult('ok', 'Done! ' + (data.totalStrikes !== undefined ? 'Strikes: '+data.totalStrikes+'/'+<%- MAX_STRIKES %> : ''));
+        showModalResult('ok', 'Done! ' + (data.totalStrikes !== undefined ? 'Strikes: '+data.totalStrikes+'/'+MAX_STRIKES : ''));
         setTimeout(function(){ closeModal(); location.reload(); }, 1200);
       } else {
         showModalResult('error', data.error || 'Something went wrong.');
