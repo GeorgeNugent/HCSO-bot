@@ -12,9 +12,13 @@ import { getBranding } from "../embeds/departmentThemes.js";
  * @param {Function} helpers.requireAuth
  * @param {Function} helpers.requireStaff
  * @param {Function} helpers.getDashboardGuild
+ * @param {Function} helpers.getMainRoleGuild
+ * @param {Function} helpers.segmentGuard
+ * @param {string[]} helpers.DASHBOARD_SEGMENTS
+ * @param {string} helpers.BOT_OWNER_ID
  * @returns {import("express").Router}
  */
-export function createMainRoutes(context, { requireAuth, requireStaff, getDashboardGuild }) {
+export function createMainRoutes(context, { requireAuth, requireStaff, getDashboardGuild, getMainRoleGuild, segmentGuard, DASHBOARD_SEGMENTS, BOT_OWNER_ID }) {
     const {
         client,
         strikes,
@@ -45,7 +49,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── Dashboard home ────────────────────────────────────────────────────────
-    router.get("/", requireStaff, async (req, res) => {
+    router.get("/", requireStaff, segmentGuard("home"), async (req, res) => {
         const uptime = process.uptime();
         const h = Math.floor(uptime / 3600);
         const m = Math.floor((uptime % 3600) / 60);
@@ -81,7 +85,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── Bot Status ────────────────────────────────────────────────────────────
-    router.get("/status", requireStaff, (req, res) => {
+    router.get("/status", requireStaff, segmentGuard("status"), (req, res) => {
         const mem    = process.memoryUsage();
         const uptime = Math.floor(process.uptime());
         res.render("status", {
@@ -98,7 +102,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── Commands page ─────────────────────────────────────────────────────────
-    router.get("/commands", requireStaff, async (req, res) => {
+    router.get("/commands", requireStaff, segmentGuard("commands"), async (req, res) => {
         const guild = await getDashboardGuild();
         let members  = [];
         let channels = [];
@@ -143,7 +147,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── Logs page ─────────────────────────────────────────────────────────────
-    router.get("/logs", requireStaff, (req, res) => {
+    router.get("/logs", requireStaff, segmentGuard("logs"), (req, res) => {
         const filter  = req.query.type  || "all";
         const curPage = Math.max(1, parseInt(req.query.page) || 1);
         const perPage = 50;
@@ -236,7 +240,19 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── Settings page ─────────────────────────────────────────────────────────
-    router.get("/settings", requireStaff, (req, res) => {
+    router.get("/settings", requireStaff, segmentGuard("settings"), async (req, res) => {
+        const mainGuild = await getMainRoleGuild();
+        const availableRoles = mainGuild
+            ? mainGuild.roles.cache
+                .filter(r => r.name !== "@everyone")
+                .map(r => ({ id: r.id, name: r.name }))
+                .sort((a, b) => a.name.localeCompare(b.name))
+            : [];
+
+        const dashboardSegmentAccess = config.dashboardSegmentAccess && typeof config.dashboardSegmentAccess === "object"
+            ? config.dashboardSegmentAccess
+            : {};
+
         res.render("settings", {
             page:    "settings",
             cfg: {
@@ -245,14 +261,19 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
                 blacklistJoinAction: config.blacklistJoinAction || "ban",
                 ticketTypes:         config.ticketTypes         || [],
                 statusRoles:         config.statusRoles         || [],
-                moduleRoleAccess:    config.moduleRoleAccess    || {}
+                moduleRoleAccess:    config.moduleRoleAccess    || {},
+                dashboardSegmentAccess
             },
-            guildId: GUILD_ID || null
+            guildId: GUILD_ID || null,
+            availableRoles,
+            segmentKeys: DASHBOARD_SEGMENTS,
+            isBotOwner: req.session.user?.id === BOT_OWNER_ID,
+            botOwnerId: BOT_OWNER_ID
         });
     });
 
     // ── API: Strike ───────────────────────────────────────────────────────────
-    router.post("/api/commands/strike", requireStaff, async (req, res) => {
+    router.post("/api/commands/strike", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
             const { userId, reason } = req.body;
             if (!userId || !reason) return res.status(400).json({ error: "Missing userId or reason" });
@@ -276,7 +297,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── API: Strike Remove ────────────────────────────────────────────────────
-    router.post("/api/commands/strike-remove", requireStaff, async (req, res) => {
+    router.post("/api/commands/strike-remove", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
             const { userId, amount } = req.body;
             if (!userId) return res.status(400).json({ error: "Missing userId" });
@@ -298,7 +319,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── API: Ban ──────────────────────────────────────────────────────────────
-    router.post("/api/commands/ban", requireStaff, async (req, res) => {
+    router.post("/api/commands/ban", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
             const { userId, reason } = req.body;
             if (!userId || !reason) return res.status(400).json({ error: "Missing userId or reason" });
@@ -318,7 +339,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── API: Kick ─────────────────────────────────────────────────────────────
-    router.post("/api/commands/kick", requireStaff, async (req, res) => {
+    router.post("/api/commands/kick", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
             const { userId, reason } = req.body;
             if (!userId || !reason) return res.status(400).json({ error: "Missing userId or reason" });
@@ -340,7 +361,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── API: Timeout ──────────────────────────────────────────────────────────
-    router.post("/api/commands/timeout", requireStaff, async (req, res) => {
+    router.post("/api/commands/timeout", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
             const { userId, minutes, reason } = req.body;
             if (!userId || !minutes) return res.status(400).json({ error: "Missing userId or minutes" });
@@ -363,7 +384,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── API: Unban ────────────────────────────────────────────────────────────
-    router.post("/api/commands/unban", requireStaff, async (req, res) => {
+    router.post("/api/commands/unban", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
             const { userId, reason } = req.body;
             if (!userId) return res.status(400).json({ error: "Missing userId" });
@@ -381,7 +402,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── API: Purge ────────────────────────────────────────────────────────────
-    router.post("/api/commands/purge", requireStaff, async (req, res) => {
+    router.post("/api/commands/purge", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
             const { channelId, amount } = req.body;
             if (!channelId || !amount) return res.status(400).json({ error: "Missing channelId or amount" });
@@ -403,7 +424,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── API: Announce ─────────────────────────────────────────────────────────
-    router.post("/api/commands/announce", requireStaff, async (req, res) => {
+    router.post("/api/commands/announce", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
             const { channelId, title, message } = req.body;
             if (!channelId || !message) return res.status(400).json({ error: "Missing channelId or message" });
@@ -433,7 +454,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── API: LOA ──────────────────────────────────────────────────────────────
-    router.post("/api/commands/loa", requireStaff, async (req, res) => {
+    router.post("/api/commands/loa", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
             const { userId, startDate, endDate, reason } = req.body;
             if (!userId || !startDate || !endDate) return res.status(400).json({ error: "Missing required fields" });
@@ -457,7 +478,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── API: End LOA ──────────────────────────────────────────────────────────
-    router.post("/api/commands/end-loa", requireStaff, async (req, res) => {
+    router.post("/api/commands/end-loa", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
             const { userId } = req.body;
             if (!userId) return res.status(400).json({ error: "Missing userId" });
@@ -474,7 +495,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── API: Case Close ───────────────────────────────────────────────────────
-    router.post("/api/commands/case-close", requireStaff, async (req, res) => {
+    router.post("/api/commands/case-close", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
             const { caseId, reason } = req.body;
             if (!caseId) return res.status(400).json({ error: "Missing caseId" });
@@ -495,7 +516,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── API: Bot Status ───────────────────────────────────────────────────────
-    router.post("/api/settings/status", requireStaff, async (req, res) => {
+    router.post("/api/settings/status", requireStaff, segmentGuard("settings"), async (req, res) => {
         try {
             const { status } = req.body;
             const valid = [
@@ -528,8 +549,35 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         }
     });
 
+    // ── API: Dashboard segment access (Bot Owner only) ──────────────────────
+    router.post("/api/settings/segment-access", requireStaff, segmentGuard("settings"), async (req, res) => {
+        try {
+            if (req.session.user?.id !== BOT_OWNER_ID) {
+                return res.status(403).json({ error: "Only the Bot Owner can change segment access." });
+            }
+
+            const incoming = req.body?.segmentAccess;
+            if (!incoming || typeof incoming !== "object") {
+                return res.status(400).json({ error: "segmentAccess object is required" });
+            }
+
+            const normalized = {};
+            for (const segment of DASHBOARD_SEGMENTS) {
+                const list = Array.isArray(incoming[segment]) ? incoming[segment] : [];
+                normalized[segment] = [...new Set(list.map(String).filter(Boolean))];
+            }
+
+            config.dashboardSegmentAccess = normalized;
+            saveConfig();
+            res.json({ success: true });
+        } catch (err) {
+            console.error("[Dashboard API] settings/segment-access:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     // ── API: Live stats (polled by status page) ───────────────────────────────
-    router.get("/api/stats", requireStaff, (req, res) => {
+    router.get("/api/stats", requireStaff, segmentGuard("status"), (req, res) => {
         const mem = process.memoryUsage();
         res.json({
             ping:      client.ws.ping,

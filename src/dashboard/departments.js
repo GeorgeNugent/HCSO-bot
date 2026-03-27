@@ -13,17 +13,17 @@ import { Router } from "express";
 import { getAllDepartments, getBranding } from "../embeds/departmentThemes.js";
 
 /**
- * @param {{ requireStaff: Function, serverStats: Object, client: Object,
+ * @param {{ requireStaff: Function, segmentGuard: Function, serverStats: Object, client: Object,
  *           strikes: Object, saveStrikes: Function,
  *           getUserStrikeEntries: Function, syncUserStrikeRoles: Function,
  *           MAX_STRIKES: number }} deps
  * @returns {import("express").Router}
  */
-export function createDepartmentRoutes({ requireStaff, serverStats, client, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES }) {
+export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats, client, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES }) {
     const router = Router();
 
     // â”€â”€ All servers / departments overview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    router.get("/servers", requireStaff, async (req, res) => {
+    router.get("/servers", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const servers      = await serverStats.getAllServers();
             const branding     = getBranding();
@@ -42,7 +42,7 @@ export function createDepartmentRoutes({ requireStaff, serverStats, client, stri
     });
 
     // â”€â”€ Per-department member management page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    router.get("/departments/:guildId", requireStaff, async (req, res) => {
+    router.get("/departments/:guildId", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const { guildId } = req.params;
             const departments = getAllDepartments();
@@ -112,7 +112,7 @@ export function createDepartmentRoutes({ requireStaff, serverStats, client, stri
     }
 
     // â”€â”€ API: Strike â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    router.post("/api/guild/:guildId/strike", requireStaff, async (req, res) => {
+    router.post("/api/guild/:guildId/strike", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const { guildId } = req.params;
             const { userId, reason } = req.body;
@@ -135,7 +135,7 @@ export function createDepartmentRoutes({ requireStaff, serverStats, client, stri
     });
 
     // â”€â”€ API: Strike Remove â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    router.post("/api/guild/:guildId/strike-remove", requireStaff, async (req, res) => {
+    router.post("/api/guild/:guildId/strike-remove", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const { guildId } = req.params;
             const { userId, amount } = req.body;
@@ -156,7 +156,7 @@ export function createDepartmentRoutes({ requireStaff, serverStats, client, stri
     });
 
     // â”€â”€ API: Kick â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    router.post("/api/guild/:guildId/kick", requireStaff, async (req, res) => {
+    router.post("/api/guild/:guildId/kick", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const { guildId } = req.params;
             const { userId, reason } = req.body;
@@ -177,7 +177,7 @@ export function createDepartmentRoutes({ requireStaff, serverStats, client, stri
     });
 
     // â”€â”€ API: Ban â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    router.post("/api/guild/:guildId/ban", requireStaff, async (req, res) => {
+    router.post("/api/guild/:guildId/ban", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const { guildId } = req.params;
             const { userId, reason } = req.body;
@@ -196,7 +196,7 @@ export function createDepartmentRoutes({ requireStaff, serverStats, client, stri
     });
 
     // â”€â”€ API: Timeout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    router.post("/api/guild/:guildId/timeout", requireStaff, async (req, res) => {
+    router.post("/api/guild/:guildId/timeout", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const { guildId } = req.params;
             const { userId, minutes, reason } = req.body;
@@ -218,7 +218,7 @@ export function createDepartmentRoutes({ requireStaff, serverStats, client, stri
     });
 
     // â”€â”€ API: Unban â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    router.post("/api/guild/:guildId/unban", requireStaff, async (req, res) => {
+    router.post("/api/guild/:guildId/unban", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const { guildId } = req.params;
             const { userId } = req.body;

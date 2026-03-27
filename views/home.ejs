@@ -73,17 +73,23 @@
 <div class="section-card" style="margin-top:24px;">
   <h3 class="section-title">Quick Actions</h3>
   <div class="quick-grid">
-    <a href="/commands#moderation" class="quick-btn">🔨 Moderation</a>
-    <a href="/commands#staffmgmt"  class="quick-btn">🌴 LOA Manager</a>
-    <a href="/commands#cases"      class="quick-btn">📋 Cases</a>
-    <a href="/commands#announce"   class="quick-btn">📢 Announce</a>
-    <a href="/logs"                class="quick-btn">📜 View Logs</a>
-    <a href="/status"              class="quick-btn">📊 Bot Status</a>
+    <% if (!segmentAccess || segmentAccess.commands) { %>
+      <a href="/commands#moderation" class="quick-btn">🔨 Moderation</a>
+      <a href="/commands#staffmgmt"  class="quick-btn">🌴 LOA Manager</a>
+      <a href="/commands#cases"      class="quick-btn">📋 Cases</a>
+      <a href="/commands#announce"   class="quick-btn">📢 Announce</a>
+    <% } %>
+    <% if (!segmentAccess || segmentAccess.logs) { %>
+      <a href="/logs"                class="quick-btn">📜 View Logs</a>
+    <% } %>
+    <% if (!segmentAccess || segmentAccess.status) { %>
+      <a href="/status"              class="quick-btn">📊 Bot Status</a>
+    <% } %>
   </div>
 </div>
 
 <!-- Department quick links -->
-<% if (typeof departments !== 'undefined' && Object.keys(departments).length > 0) { %>
+<% if ((!segmentAccess || segmentAccess.departments) && typeof departments !== 'undefined' && Object.keys(departments).length > 0) { %>
 <div class="section-card" style="margin-top:16px;">
   <h3 class="section-title">🏛️ Departments</h3>
   <div class="quick-grid">

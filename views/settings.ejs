@@ -93,6 +93,40 @@
   <p class="section-desc" style="margin-top:8px;">Use <code>/set-module-access</code> in Discord to configure these.</p>
 </div>
 
+<!-- Bot Owner Segment Access -->
+<div class="section-card" style="margin-top:20px;">
+  <h3 class="section-title">Bot Owner: Dashboard Segment Access</h3>
+  <p class="section-desc">Assign role IDs from main server <code>1318018654515888138</code>. If a segment has no roles selected, it stays open to all staff. Bot Owner always has full access.</p>
+
+  <% if (!isBotOwner) { %>
+    <div class="alert alert-danger">Only Bot Owner (<code><%= botOwnerId %></code>) can edit this section.</div>
+  <% } %>
+
+  <table class="log-table" style="margin-top:10px;">
+    <thead><tr><th>Segment</th><th>Allowed Roles</th></tr></thead>
+    <tbody>
+      <% segmentKeys.forEach(seg => { %>
+      <tr>
+        <td><strong><%= seg %></strong></td>
+        <td>
+          <select class="segment-role-select" data-segment="<%= seg %>" multiple <%= isBotOwner ? '' : 'disabled' %> style="min-width:280px;min-height:110px;">
+            <% availableRoles.forEach(role => { %>
+              <% const selected = (cfg.dashboardSegmentAccess?.[seg] || []).includes(role.id); %>
+              <option value="<%= role.id %>" <%= selected ? 'selected' : '' %>><%= role.name %> (<%= role.id %>)</option>
+            <% }); %>
+          </select>
+        </td>
+      </tr>
+      <% }); %>
+    </tbody>
+  </table>
+
+  <% if (isBotOwner) { %>
+    <button type="button" class="btn btn-info" onclick="saveSegmentAccess()" style="margin-top:12px;">Save Segment Access</button>
+    <div id="segment-access-result" class="inline-result" style="display:none;margin-top:8px;"></div>
+  <% } %>
+</div>
+
 <script>
 async function updateStatus() {
   const status = document.getElementById("statusSelect").value;
@@ -113,6 +147,41 @@ async function updateStatus() {
       resultEl.classList.add("result-success");
     } else {
       resultEl.textContent = "❌ " + (d.error || "Failed");
+      resultEl.classList.add("result-error");
+    }
+  } catch (e) {
+    resultEl.textContent = "❌ Network error";
+    resultEl.classList.add("result-error");
+  }
+}
+
+async function saveSegmentAccess() {
+  var resultEl = document.getElementById("segment-access-result");
+  if (!resultEl) return;
+
+  resultEl.style.display = "block";
+  resultEl.className = "inline-result";
+  resultEl.textContent = "Saving...";
+
+  var segmentAccess = {};
+  document.querySelectorAll(".segment-role-select").forEach(function(selectEl) {
+    var seg = selectEl.dataset.segment;
+    var selected = Array.from(selectEl.selectedOptions).map(function(opt) { return opt.value; });
+    segmentAccess[seg] = selected;
+  });
+
+  try {
+    var response = await fetch("/api/settings/segment-access", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ segmentAccess: segmentAccess })
+    });
+    var data = await response.json();
+    if (data.success) {
+      resultEl.textContent = "✅ Segment access saved.";
+      resultEl.classList.add("result-success");
+    } else {
+      resultEl.textContent = "❌ " + (data.error || "Failed");
       resultEl.classList.add("result-error");
     }
   } catch (e) {

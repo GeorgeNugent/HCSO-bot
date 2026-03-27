@@ -38,35 +38,47 @@
   <aside class="sidebar">
     <nav class="sidebar-nav">
       <div class="sidebar-section-label">Main</div>
-      <a href="/"         class="nav-link <%= page === 'home'       ? 'active' : '' %>">
-        <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
-      </a>
-      <a href="/status"   class="nav-link <%= page === 'status'     ? 'active' : '' %>">
-        <span class="nav-icon">📊</span><span class="nav-label">Bot Status</span>
-      </a>
-      <a href="/commands" class="nav-link <%= page === 'commands'   ? 'active' : '' %>">
-        <span class="nav-icon">⚡</span><span class="nav-label">Commands</span>
-      </a>
-      <a href="/logs"     class="nav-link <%= page === 'logs'       ? 'active' : '' %>">
-        <span class="nav-icon">📋</span><span class="nav-label">Logs</span>
-      </a>
-      <a href="/settings" class="nav-link <%= page === 'settings'   ? 'active' : '' %>">
-        <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
-      </a>
+      <% if (!segmentAccess || segmentAccess.home) { %>
+        <a href="/"         class="nav-link <%= page === 'home'       ? 'active' : '' %>">
+          <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
+        </a>
+      <% } %>
+      <% if (!segmentAccess || segmentAccess.status) { %>
+        <a href="/status"   class="nav-link <%= page === 'status'     ? 'active' : '' %>">
+          <span class="nav-icon">📊</span><span class="nav-label">Bot Status</span>
+        </a>
+      <% } %>
+      <% if (!segmentAccess || segmentAccess.commands) { %>
+        <a href="/commands" class="nav-link <%= page === 'commands'   ? 'active' : '' %>">
+          <span class="nav-icon">⚡</span><span class="nav-label">Commands</span>
+        </a>
+      <% } %>
+      <% if (!segmentAccess || segmentAccess.logs) { %>
+        <a href="/logs"     class="nav-link <%= page === 'logs'       ? 'active' : '' %>">
+          <span class="nav-icon">📋</span><span class="nav-label">Logs</span>
+        </a>
+      <% } %>
+      <% if (!segmentAccess || segmentAccess.settings) { %>
+        <a href="/settings" class="nav-link <%= page === 'settings'   ? 'active' : '' %>">
+          <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
+        </a>
+      <% } %>
 
-      <div class="sidebar-section-label" style="margin-top:8px;">Departments</div>
-      <a href="/servers"     class="nav-link <%= page === 'servers'     ? 'active' : '' %>">
-        <span class="nav-icon">🌐</span><span class="nav-label">All Servers</span>
-      </a>
-      <% if (typeof servers !== 'undefined' && servers.length > 0) { %>
-        <% servers.forEach(function(srv) { %>
-          <a href="/departments/<%= srv.id %>"
-             class="nav-link <%= page === 'department' && typeof guildId !== 'undefined' && guildId === srv.id ? 'active' : '' %>"
-             title="<%= srv.name %>">
-            <span class="nav-icon">🏛️</span>
-            <span class="nav-label" style="font-size:12px;"><%= srv.shortName || srv.department %></span>
-          </a>
-        <% }); %>
+      <% if (!segmentAccess || segmentAccess.departments) { %>
+        <div class="sidebar-section-label" style="margin-top:8px;">Departments</div>
+        <a href="/servers"     class="nav-link <%= page === 'servers'     ? 'active' : '' %>">
+          <span class="nav-icon">🌐</span><span class="nav-label">All Servers</span>
+        </a>
+        <% if (typeof servers !== 'undefined' && servers.length > 0) { %>
+          <% servers.forEach(function(srv) { %>
+            <a href="/departments/<%= srv.id %>"
+               class="nav-link <%= page === 'department' && typeof guildId !== 'undefined' && guildId === srv.id ? 'active' : '' %>"
+               title="<%= srv.name %>">
+              <span class="nav-icon">🏛️</span>
+              <span class="nav-label" style="font-size:12px;"><%= srv.shortName || srv.department %></span>
+            </a>
+          <% }); %>
+        <% } %>
       <% } %>
     </nav>
     <div class="sidebar-footer">
