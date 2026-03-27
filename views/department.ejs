@@ -1,4 +1,4 @@
-﻿<%- include('partials/header') %>
+<%- include('partials/header') %>
 
 <style>
   :root {
@@ -167,12 +167,12 @@
     <% if (detail.icon) { %>
       <img src="<%= detail.icon %>" alt="" class="dept-icon-img" onerror="this.style.display='none'">
     <% } else { %>
-      <div class="dept-icon-placeholder">🏛️</div>
+      <div class="dept-icon-placeholder">???</div>
     <% } %>
     <div>
       <h2 class="page-title" style="margin:0;"><%= dept.name %></h2>
       <p class="page-subtitle" style="margin:4px 0 0;">
-        <%= detail.name %> &nbsp;·&nbsp; <%= detail.memberCount.toLocaleString() %> members
+        <%= detail.name %> &nbsp;�&nbsp; <%= detail.memberCount.toLocaleString() %> members
       </p>
     </div>
   </div>
@@ -181,28 +181,28 @@
 <!-- Stats row -->
 <div class="stats-grid" style="margin-bottom:24px;">
   <div class="stat-card">
-    <div class="stat-icon">👥</div>
+    <div class="stat-icon">??</div>
     <div class="stat-body">
       <div class="stat-value"><%= detail.memberCount.toLocaleString() %></div>
       <div class="stat-label">Total Members</div>
     </div>
   </div>
   <div class="stat-card">
-    <div class="stat-icon">👤</div>
+    <div class="stat-icon">??</div>
     <div class="stat-body">
       <div class="stat-value"><%= members.length %></div>
       <div class="stat-label">Loaded</div>
     </div>
   </div>
   <div class="stat-card stat-card--ok">
-    <div class="stat-icon">🟢</div>
+    <div class="stat-icon">??</div>
     <div class="stat-body">
       <div class="stat-value"><%= detail.online ? 'Online' : 'Offline' %></div>
       <div class="stat-label">Bot Status</div>
     </div>
   </div>
   <div class="stat-card stat-card--warn">
-    <div class="stat-icon">⚖️</div>
+    <div class="stat-icon">??</div>
     <div class="stat-body">
       <div class="stat-value"><%= members.reduce(function(s,m){return s+m.strikeCount},0) %></div>
       <div class="stat-label">Total Strikes</div>
@@ -216,21 +216,21 @@
   var useCommandTabNames = ['HCSO', 'CPD', 'FHP'].includes(deptCode);
 %>
 <div class="tab-bar dept-tabs">
-  <button class="tab-btn active" data-dtab="dtab-members"><%= useCommandTabNames ? '🔨 Moderation' : '👥 Members' %></button>
-  <button class="tab-btn" data-dtab="dtab-cases">📋 Cases</button>
-  <button class="tab-btn" data-dtab="dtab-loa"><%= useCommandTabNames ? '🌴 Staff Mgmt' : '🌴 LOA Manager' %></button>
-  <button class="tab-btn" data-dtab="dtab-logs">🧾 View Logs</button>
-  <button class="tab-btn" data-dtab="dtab-settings">⚙️ Settings</button>
+  <button class="tab-btn active" data-dtab="dtab-members"><%= useCommandTabNames ? '?? Moderation' : '?? Members' %></button>
+  <button class="tab-btn" data-dtab="dtab-cases">?? Cases</button>
+  <button class="tab-btn" data-dtab="dtab-loa"><%= useCommandTabNames ? '?? Staff Mgmt' : '?? LOA Manager' %></button>
+  <button class="tab-btn" data-dtab="dtab-logs">?? View Logs</button>
+  <button class="tab-btn" data-dtab="dtab-settings">?? Settings</button>
 </div>
 
-<!-- ─── Members tab panel ─────────────────────────────────────────────── -->
+<!-- --- Members tab panel ----------------------------------------------- -->
 <div id="dtab-members" class="tab-panel active">
   <div class="card">
     <div class="card-header">
-      <h3 class="card-title"><%= useCommandTabNames ? '🔨 Moderation' : '👥 Members' %></h3>
+      <h3 class="card-title"><%= useCommandTabNames ? '?? Moderation' : '?? Members' %></h3>
     </div>
     <div class="card-body" style="padding-top:12px;">
-      <input type="text" id="memberSearch" class="member-search" placeholder="🔍  Search members…" oninput="filterMembers()">
+      <input type="text" id="memberSearch" class="member-search" placeholder="??  Search members�" oninput="filterMembers()">
       <% if (members.length === 0) { %>
         <p style="color:var(--text-muted);padding:12px 0;">
           No members loaded.
@@ -258,7 +258,7 @@
               <td class="col-member">
                 <img src="<%= m.avatar %>" alt="" class="member-avatar" onerror="this.style.display='none'">
                 <span style="font-weight:600;color:var(--text-primary);"><%= m.name %></span>
-                <% if (m.timedOut) { %><span class="badge" style="background:#8e44ad22;color:#8e44ad;margin-left:4px;">⏱ Timed out</span><% } %>
+                <% if (m.timedOut) { %><span class="badge" style="background:#8e44ad22;color:#8e44ad;margin-left:4px;">? Timed out</span><% } %>
               </td>
               <td class="col-roles" style="font-size:12px;color:var(--text-muted);">
                 <div class="role-cell">
@@ -274,11 +274,11 @@
               <td class="col-joined" style="font-size:12px;color:var(--text-muted);"><%= m.joinedAt %></td>
               <td class="col-actions">
                 <div class="action-btns">
-                  <button class="btn btn-sm btn-strike" data-action="strike" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">⚖️ Strike</button>
-                  <button class="btn btn-sm btn-timeout" data-action="timeout" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">⏱ Timeout</button>
-                  <button class="btn btn-sm btn-kick" data-action="kick" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">👢 Kick</button>
-                  <button class="btn btn-sm btn-ban" data-action="ban" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">🔨 Ban</button>
-                  <button class="btn btn-sm btn-strike-remove" data-action="strike-remove" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">❌ Remove Strike</button>
+                  <button class="btn btn-sm btn-strike" data-action="strike" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">?? Strike</button>
+                  <button class="btn btn-sm btn-timeout" data-action="timeout" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">? Timeout</button>
+                  <button class="btn btn-sm btn-kick" data-action="kick" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">?? Kick</button>
+                  <button class="btn btn-sm btn-ban" data-action="ban" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">?? Ban</button>
+                  <button class="btn btn-sm btn-strike-remove" data-action="strike-remove" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">? Remove Strike</button>
                 </div>
               </td>
             </tr>
@@ -291,38 +291,38 @@
   </div>
 
   <div style="margin-top:16px;">
-    <a href="/servers" class="btn btn-outline">← Back to All Servers</a>
+    <a href="/servers" class="btn btn-outline">? Back to All Servers</a>
   </div>
 </div><!-- end dtab-members -->
 
-<!-- ─── Cases tab panel ──────────────────────────────────────────────────── -->
+<!-- --- Cases tab panel ---------------------------------------------------- -->
 <div id="dtab-cases" class="tab-panel">
   <% if ((deptCases||[]).length === 0) { %>
     <p style="color:var(--text-muted);padding:8px 0;">No cases for this department yet. Create one below.</p>
   <% } %>
   <div class="cmd-grid">
     <div class="cmd-card">
-      <div class="cmd-card-header"><span class="cmd-card-icon">🆕</span><div class="cmd-card-title">Create Case</div></div>
+      <div class="cmd-card-header"><span class="cmd-card-icon">??</span><div class="cmd-card-title">Create Case</div></div>
       <div class="cmd-card-body">
-        <div class="form-group"><label>Title</label><input class="form-control" id="dc-title" placeholder="Case title…"></div>
+        <div class="form-group"><label>Title</label><input class="form-control" id="dc-title" placeholder="Case title�"></div>
         <div class="form-group"><label>Incident Type</label><input class="form-control" id="dc-type" placeholder="e.g. Traffic Stop"></div>
-        <div class="form-group"><label>Location</label><input class="form-control" id="dc-loc" placeholder="Location…"></div>
+        <div class="form-group"><label>Location</label><input class="form-control" id="dc-loc" placeholder="Location�"></div>
         <div class="form-group"><label>Suspect (optional)</label><input class="form-control" id="dc-suspect" placeholder="Unknown"></div>
-        <div class="form-group"><label>Summary</label><textarea class="form-control" id="dc-summary" rows="3" placeholder="Brief summary…"></textarea></div>
+        <div class="form-group"><label>Summary</label><textarea class="form-control" id="dc-summary" rows="3" placeholder="Brief summary�"></textarea></div>
         <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
           <input type="checkbox" id="dc-joint" style="width:auto;margin:0;">
-          <label for="dc-joint" style="margin:0;color:var(--text);cursor:pointer;">🤝 Joint Ops — visible to all departments</label>
+          <label for="dc-joint" style="margin:0;color:var(--text);cursor:pointer;">?? Joint Ops � visible to all departments</label>
         </div>
         <button class="btn btn-primary btn-sm" onclick="deptCaseCreate()">Create</button>
         <div id="dc-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
       </div>
     </div>
     <div class="cmd-card">
-      <div class="cmd-card-header"><span class="cmd-card-icon">📂</span><div class="cmd-card-title">View Case</div></div>
+      <div class="cmd-card-header"><span class="cmd-card-icon">??</span><div class="cmd-card-title">View Case</div></div>
       <div class="cmd-card-body">
         <div class="form-group"><label>Case</label>
           <select class="form-control" id="dc-view-id">
-            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %> (<%= c.status %>)</option><% }); %>
+            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> � <%= c.title %> (<%= c.status %>)</option><% }); %>
           </select>
         </div>
         <button class="btn btn-primary btn-sm" onclick="deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-view',{caseId:document.getElementById('dc-view-id').value},'dc-view-result')">View</button>
@@ -330,24 +330,24 @@
       </div>
     </div>
     <div class="cmd-card">
-      <div class="cmd-card-header"><span class="cmd-card-icon">📁</span><div class="cmd-card-title">Close Case</div></div>
+      <div class="cmd-card-header"><span class="cmd-card-icon">??</span><div class="cmd-card-title">Close Case</div></div>
       <div class="cmd-card-body">
         <div class="form-group"><label>Case</label>
           <select class="form-control" id="dc-close-id">
-            <% (deptOpenCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %></option><% }); %>
+            <% (deptOpenCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> � <%= c.title %></option><% }); %>
           </select>
         </div>
-        <div class="form-group"><label>Reason</label><input class="form-control" id="dc-close-reason" placeholder="Closing reason…"></div>
+        <div class="form-group"><label>Reason</label><input class="form-control" id="dc-close-reason" placeholder="Closing reason�"></div>
         <button class="btn btn-primary btn-sm" onclick="deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-close',{caseId:document.getElementById('dc-close-id').value,reason:document.getElementById('dc-close-reason').value},'dc-close-result')">Close Case</button>
         <div id="dc-close-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
       </div>
     </div>
     <div class="cmd-card">
-      <div class="cmd-card-header"><span class="cmd-card-icon">📌</span><div class="cmd-card-title">Assign Case</div></div>
+      <div class="cmd-card-header"><span class="cmd-card-icon">??</span><div class="cmd-card-title">Assign Case</div></div>
       <div class="cmd-card-body">
         <div class="form-group"><label>Case</label>
           <select class="form-control" id="dc-assign-id">
-            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %></option><% }); %>
+            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> � <%= c.title %></option><% }); %>
           </select>
         </div>
         <div class="form-group"><label>Assign To</label>
@@ -360,48 +360,50 @@
       </div>
     </div>
     <div class="cmd-card">
-      <div class="cmd-card-header"><span class="cmd-card-icon">📸</span><div class="cmd-card-title">Add Evidence</div></div>
+      <div class="cmd-card-header"><span class="cmd-card-icon">??</span><div class="cmd-card-title">Add Evidence</div></div>
       <div class="cmd-card-body">
         <div class="form-group"><label>Case</label>
           <select class="form-control" id="dc-evi-id">
-            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %></option><% }); %>
+            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> � <%= c.title %></option><% }); %>
           </select>
         </div>
-        <div class="form-group"><label>Description</label><textarea class="form-control" id="dc-evi-desc" rows="2" placeholder="Evidence details…"></textarea></div>
+        <div class="form-group"><label>Description</label><textarea class="form-control" id="dc-evi-desc" rows="2" placeholder="Evidence details�"></textarea></div>
         <button class="btn btn-primary btn-sm" onclick="deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/evidence-add',{caseId:document.getElementById('dc-evi-id').value,evidence:document.getElementById('dc-evi-desc').value},'dc-evi-result')">Add Evidence</button>
         <div id="dc-evi-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
       </div>
     </div>
     <div class="cmd-card">
-      <div class="cmd-card-header"><span class="cmd-card-icon">�</span><div class="cmd-card-title">View Evidence</div></div>
+      <div class="cmd-card-header"><span class="cmd-card-icon">&#x1F50D;</span><div class="cmd-card-title">View Evidence</div></div>
       <div class="cmd-card-body">
         <div class="form-group"><label>Case</label>
           <select class="form-control" id="dc-evview-id">
-            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %></option><% }); %>
+            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> � <%= c.title %></option><% }); %>
           </select>
         </div>
         <button class="btn btn-primary btn-sm" onclick="viewEvidence()">View Evidence</button>
         <div id="dc-evview-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
       </div>
     </div>
+    <div class="cmd-card">
+      <div class="cmd-card-header"><span class="cmd-card-icon">&#x1F5D1;&#xFE0F;</span><div class="cmd-card-title">Delete Case</div></div>
       <div class="cmd-card-body">
         <div class="form-group"><label>Case</label>
           <select class="form-control" id="dc-del-id">
-            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %></option><% }); %>
+            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> � <%= c.title %></option><% }); %>
           </select>
         </div>
         <div class="form-group"><label>Type YES to confirm</label><input class="form-control" id="dc-del-confirm" placeholder="YES"></div>
-        <button class="btn btn-sm" style="background:#c0392b;color:#fff;border:none;" onclick="deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-delete',{caseId:document.getElementById('dc-del-id').value,confirmation:document.getElementById('dc-del-confirm').value},'dc-del-result')">🗑️ Delete</button>
+        <button class="btn btn-sm" style="background:#c0392b;color:#fff;border:none;" onclick="deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-delete',{caseId:document.getElementById('dc-del-id').value,confirmation:document.getElementById('dc-del-confirm').value},'dc-del-result')">??? Delete</button>
         <div id="dc-del-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
       </div>
     </div>
   </div>
 </div><!-- end dtab-cases -->
 
-<!-- ─── LOA Manager tab panel ─────────────────────────────────────────────── -->
+<!-- --- LOA Manager tab panel ----------------------------------------------- -->
 <div id="dtab-loa" class="tab-panel">
   <div class="card" style="margin-bottom:16px;">
-    <div class="card-header"><h3 class="card-title"><%= useCommandTabNames ? '🌴 Staff Mgmt — Current LOA' : '🌴 Currently On LOA' %> (<%= (usersOnLoa||[]).length %>)</h3></div>
+    <div class="card-header"><h3 class="card-title"><%= useCommandTabNames ? '?? Staff Mgmt � Current LOA' : '?? Currently On LOA' %> (<%= (usersOnLoa||[]).length %>)</h3></div>
     <div class="card-body">
       <% if (!(usersOnLoa||[]).length) { %>
         <p style="color:var(--text-muted);">No members currently on LOA for this department.</p>
@@ -409,7 +411,7 @@
         <% (usersOnLoa||[]).forEach(function(u){ %>
           <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
             <span><strong><%= u.name %></strong></span>
-            <span style="font-size:12px;color:var(--text-muted);"><%= u.startDate %> → <%= u.endDate %></span>
+            <span style="font-size:12px;color:var(--text-muted);"><%= u.startDate %> ? <%= u.endDate %></span>
           </div>
         <% }); %>
       <% } %>
@@ -417,7 +419,7 @@
   </div>
   <div class="cmd-grid">
     <div class="cmd-card">
-      <div class="cmd-card-header"><span class="cmd-card-icon">🌴</span><div class="cmd-card-title">Set LOA</div></div>
+      <div class="cmd-card-header"><span class="cmd-card-icon">??</span><div class="cmd-card-title">Set LOA</div></div>
       <div class="cmd-card-body">
         <div class="form-group"><label>Member</label>
           <select class="form-control" id="dloa-user">
@@ -426,14 +428,14 @@
         </div>
         <div class="form-group"><label>Start Date (MM-DD-YYYY)</label><input class="form-control" id="dloa-start" placeholder="03-01-2026"></div>
         <div class="form-group"><label>End Date (MM-DD-YYYY)</label><input class="form-control" id="dloa-end" placeholder="03-15-2026"></div>
-        <div class="form-group"><label>Reason (optional)</label><input class="form-control" id="dloa-reason" placeholder="Vacation, medical…"></div>
+        <div class="form-group"><label>Reason (optional)</label><input class="form-control" id="dloa-reason" placeholder="Vacation, medical�"></div>
         <button class="btn btn-primary btn-sm" onclick="deptLOAAction()">Set LOA</button>
         <div id="dloa-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
       </div>
     </div>
     <% if (canManageEndLoa || !isHcsoDepartment) { %>
     <div class="cmd-card">
-      <div class="cmd-card-header"><span class="cmd-card-icon">✅</span><div class="cmd-card-title">End LOA</div></div>
+      <div class="cmd-card-header"><span class="cmd-card-icon">?</span><div class="cmd-card-title">End LOA</div></div>
       <div class="cmd-card-body">
         <% if ((usersOnLoa||[]).length > 0) { %>
           <div class="form-group"><label>Member</label>
@@ -450,7 +452,7 @@
     </div>
     <% } else if (isHcsoDepartment) { %>
     <div class="cmd-card">
-      <div class="cmd-card-header"><span class="cmd-card-icon">✅</span><div class="cmd-card-title">End LOA</div></div>
+      <div class="cmd-card-header"><span class="cmd-card-icon">?</span><div class="cmd-card-title">End LOA</div></div>
       <div class="cmd-card-body">
         <p style="color:var(--text-muted);">Only supervisors+ can end LOA in this department.</p>
       </div>
@@ -459,10 +461,10 @@
   </div>
 </div><!-- end dtab-loa -->
 
-<!-- ─── View Logs tab panel ────────────────────────────────────────────────── -->
+<!-- --- View Logs tab panel -------------------------------------------------- -->
 <div id="dtab-logs" class="tab-panel">
   <div class="card">
-    <div class="card-header"><h3 class="card-title">⚖️ Strike Log</h3></div>
+    <div class="card-header"><h3 class="card-title">?? Strike Log</h3></div>
     <div class="card-body">
       <% if (!(deptStrikeLogs||[]).length) { %>
         <p style="color:var(--text-muted);">No strikes on record for this department.</p>
@@ -487,18 +489,18 @@
   </div>
 </div><!-- end dtab-logs -->
 
-<!-- ─── Settings tab panel ──────────────────────────────────────────────── -->
+<!-- --- Settings tab panel ------------------------------------------------ -->
 <div id="dtab-settings" class="tab-panel">
   <div class="card">
-    <div class="card-header"><h3 class="card-title">⚙️ Staff Access Settings</h3></div>
+    <div class="card-header"><h3 class="card-title">?? Staff Access Settings</h3></div>
     <div class="card-body">
       <p style="color:var(--text-muted);font-size:13px;margin-bottom:24px;">Select which staff roles from the main server can access this department.</p>
       
       <!-- Department Access (Main Server Roles) -->
       <div>
-        <h4 style="color:var(--text-primary);font-weight:600;margin-bottom:12px;">👥 Department Access</h4>
+        <h4 style="color:var(--text-primary);font-weight:600;margin-bottom:12px;">?? Department Access</h4>
         <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">Select roles from the main server that can view and manage this department on the dashboard.</p>
-        <div id="dept-access-loading" style="color:var(--text-muted);">Loading roles…</div>
+        <div id="dept-access-loading" style="color:var(--text-muted);">Loading roles�</div>
         <div id="dept-access-container" style="display:none;margin-bottom:12px;max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:12px;"></div>
         <button class="btn btn-primary btn-sm" onclick="saveDeptAccess()" id="dept-access-save-btn" style="display:none;">Save Department Access</button>
         <div id="dept-access-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
@@ -507,7 +509,7 @@
   </div>
 </div><!-- end dtab-settings -->
 
-<!-- ── Action modal ───────────────────────────────────────────────────────── -->
+<!-- -- Action modal --------------------------------------------------------- -->
 <div class="modal-overlay" id="actionModal" data-max-strikes="<%= MAX_STRIKES %>">
   <div class="modal-box">
     <h3 class="modal-title" id="modalTitle">Action</h3>
@@ -527,24 +529,24 @@
   var currentUserId = null;
 
   var ACTIONS = {
-    strike:  { title:'⚖️ Give Strike',   endpoint:'/api/guild/'+GUILD_ID+'/strike',   fields:['reason'] },
-    timeout: { title:'⏱ Timeout Member', endpoint:'/api/guild/'+GUILD_ID+'/timeout',  fields:['minutes','reason'] },
-    kick:    { title:'👢 Kick Member',    endpoint:'/api/guild/'+GUILD_ID+'/kick',     fields:['reason'] },
-    ban:     { title:'🔨 Ban Member',     endpoint:'/api/guild/'+GUILD_ID+'/ban',      fields:['reason'] }
+    strike:  { title:'?? Give Strike',   endpoint:'/api/guild/'+GUILD_ID+'/strike',   fields:['reason'] },
+    timeout: { title:'? Timeout Member', endpoint:'/api/guild/'+GUILD_ID+'/timeout',  fields:['minutes','reason'] },
+    kick:    { title:'?? Kick Member',    endpoint:'/api/guild/'+GUILD_ID+'/kick',     fields:['reason'] },
+    ban:     { title:'?? Ban Member',     endpoint:'/api/guild/'+GUILD_ID+'/ban',      fields:['reason'] }
   };
-    ACTIONS['strike-remove'] = { title:'❌ Remove Strike', endpoint:'/api/guild/'+GUILD_ID+'/strike-remove', fields:['amount'] };
+    ACTIONS['strike-remove'] = { title:'? Remove Strike', endpoint:'/api/guild/'+GUILD_ID+'/strike-remove', fields:['amount'] };
 
   function openModal(action, userId, name) {
     currentAction = action;
     currentUserId = userId;
     var cfg = ACTIONS[action];
-    document.getElementById('modalTitle').textContent = cfg.title + ' — ' + name;
+    document.getElementById('modalTitle').textContent = cfg.title + ' � ' + name;
     var html = '<input type="hidden" id="mUserId" value="'+userId+'">';
     if (cfg.fields.includes('minutes')) {
       html += '<div class="form-group"><label>Duration (minutes)</label><input class="form-control" id="mMinutes" type="number" min="1" max="40320" value="60"></div>';
     }
     if (cfg.fields.includes('reason')) {
-      html += '<div class="form-group"><label>Reason</label><input class="form-control" id="mReason" type="text" placeholder="Enter reason…"></div>';
+      html += '<div class="form-group"><label>Reason</label><input class="form-control" id="mReason" type="text" placeholder="Enter reason�"></div>';
     }
       if (cfg.fields.includes('amount')) {
         html += '<div class="form-group"><label>Strikes to Remove</label><input class="form-control" id="mAmount" type="number" min="1" max="'+MAX_STRIKES+'" value="1"></div>';
@@ -575,7 +577,7 @@
 
     var btn = document.getElementById('modalSubmitBtn');
     btn.disabled = true;
-    btn.textContent = 'Working…';
+    btn.textContent = 'Working�';
 
     try {
       var res = await fetch(cfg.endpoint, {
@@ -617,7 +619,7 @@
     if (e.target === this) closeModal();
   });
 
-    // ── Department tab switching ──────────────────────────────────────────────
+    // -- Department tab switching ----------------------------------------------
     var DEPT_GUILD_ID = '<%= guildId %>';
     document.querySelectorAll('.tab-btn[data-dtab]').forEach(function(btn) {
       btn.addEventListener('click', function() {
@@ -629,7 +631,7 @@
       });
     });
 
-    // ── Department AJAX helper ────────────────────────────────────────────────
+    // -- Department AJAX helper ------------------------------------------------
     async function deptCaseAction(endpoint, body, resultId) {
       var el = document.getElementById(resultId);
       if (el) el.style.display = 'none';
@@ -662,17 +664,17 @@
               } else { assignedDisplay = c.assignedTo; }
             }
             var rows = [
-              ['ID', c.id || '—'],
-              ['Title', c.title || '—'],
+              ['ID', c.id || '�'],
+              ['Title', c.title || '�'],
               ['Status', status],
-              ['Incident Type', c.incidentType || '—'],
-              ['Location', c.location || '—'],
-              ['Suspect', c.suspect || '—'],
+              ['Incident Type', c.incidentType || '�'],
+              ['Location', c.location || '�'],
+              ['Suspect', c.suspect || '�'],
               ['Assigned To', assignedDisplay],
-              ['Summary', c.summary || '—'],
+              ['Summary', c.summary || '�'],
               ['Evidence Items', evidence],
-              ['Opened At', c.createdAt ? new Date(c.createdAt).toLocaleString() : '—'],
-              ['Submitted By', c.officerId || '—'],
+              ['Opened At', c.createdAt ? new Date(c.createdAt).toLocaleString() : '�'],
+              ['Submitted By', c.officerId || '�'],
             ];
             if (c.closedAt) rows.push(['Closed At', new Date(c.closedAt).toLocaleString()]);
             if (c.reopenReason) rows.push(['Reopen Reason', c.reopenReason]);
@@ -725,8 +727,8 @@
         evidence.forEach(function(ev, i) {
           html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.06)">'
             + '<td style="padding:5px 8px;color:#aaa">' + (i+1) + '</td>'
-            + '<td style="padding:5px 8px;color:#eee;word-break:break-word">' + (ev.text||'—') + '</td>'
-            + '<td style="padding:5px 8px;color:#aaa;white-space:nowrap">' + (ev.addedAt ? new Date(ev.addedAt).toLocaleString() : '—') + '</td>'
+            + '<td style="padding:5px 8px;color:#eee;word-break:break-word">' + (ev.text||'�') + '</td>'
+            + '<td style="padding:5px 8px;color:#aaa;white-space:nowrap">' + (ev.addedAt ? new Date(ev.addedAt).toLocaleString() : '�') + '</td>'
             + '</tr>';
         });
         html += '</table>';
@@ -756,7 +758,7 @@
       }, 'dloa-result');
     }
 
-    // ── Settings Tab Functions ────────────────────────────────────────────────
+    // -- Settings Tab Functions ------------------------------------------------
     var deptSettingsCache = { roles: [], deptAccess: [] };
 
     async function loadDepartmentSettings() {
