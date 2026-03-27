@@ -466,6 +466,41 @@ function buildApplicationRecord(user, selectionValue) {
     };
 }
 
+const DEPARTMENT_INVITE_LINKS = {
+    "1482203107432595601": "https://discord.gg/qmwhsPwEDy", // HCSO
+    "1482498655523962892": "https://discord.gg/MR7RgZA4qS", // FHP
+    "1482501585803415572": "https://discord.gg/bRakG4SdRc"  // CPD
+};
+
+const DEPARTMENT_AUTO_ROLE_IDS = {
+    "1482203107432595601": "1482203107432595603", // HCSO member role
+    "1482498655523962892": "1482498655523962894", // FHP member role
+    "1482501585803415572": "1482501585803415574"  // CPD member role
+};
+
+function getDepartmentShortName(guildId) {
+    const departments = getAllDepartments();
+    return String(departments[String(guildId)]?.shortName || "").toUpperCase();
+}
+
+function getDepartmentInviteLinkForApp(app) {
+    if (!app || app.type !== "department") return null;
+
+    const appGuildId = String(app.departmentGuildId || "");
+    if (DEPARTMENT_INVITE_LINKS[appGuildId]) {
+        return DEPARTMENT_INVITE_LINKS[appGuildId];
+    }
+
+    const appShortName = getDepartmentShortName(appGuildId);
+    if (!appShortName) return null;
+
+    for (const [guildId, link] of Object.entries(DEPARTMENT_INVITE_LINKS)) {
+        if (getDepartmentShortName(guildId) === appShortName) return link;
+    }
+
+    return null;
+}
+
 function getOpenApplicationSession(userId) {
     ensureApplicationsData();
     const session = applicationsData.activeSessions[userId];
@@ -496,7 +531,9 @@ async function sendApplicationDecisionDm(clientRef, app, acceptedBy, decision, r
     if (!targetUser) return;
 
     if (decision === "accepted") {
-        await targetUser.send(`✅ Application accepted. Your application for **${app.departmentName}** has been accepted by <@${acceptedBy}>.`).catch(() => {});
+        const inviteLink = getDepartmentInviteLinkForApp(app);
+        const inviteLine = inviteLink ? `\nJoin your department server: ${inviteLink}` : "";
+        await targetUser.send(`✅ Application accepted. Your application for **${app.departmentName}** has been accepted by <@${acceptedBy}>.${inviteLine}`).catch(() => {});
         return;
     }
 
@@ -1833,6 +1870,39 @@ client.on("guildMemberAdd", async member => {
 
             await sendModerationLogEmbed(member.guild.id, "blacklist", null, failureEmbed);
         }
+    }
+
+    // Auto-assign department role if user has an accepted department application.
+    try {
+        const targetGuildId = String(member.guild.id);
+        const targetRoleId = DEPARTMENT_AUTO_ROLE_IDS[targetGuildId] || null;
+
+        if (targetRoleId) {
+            const acceptedDepartmentApps = Object.values(applicationsData.applications || {})
+                .filter(app => app
+                    && app.type === "department"
+                    && app.status === "accepted"
+                    && String(app.applicantId || "") === String(member.id)
+                );
+
+            const isExactDepartmentMatch = acceptedDepartmentApps
+                .some(app => String(app.departmentGuildId || "") === targetGuildId);
+
+            const targetShortName = getDepartmentShortName(targetGuildId);
+            const isShortNameMatch = targetShortName
+                && acceptedDepartmentApps.some(app => getDepartmentShortName(app.departmentGuildId) === targetShortName);
+
+            if (isExactDepartmentMatch || isShortNameMatch) {
+                const role = member.guild.roles.cache.get(targetRoleId)
+                    || await member.guild.roles.fetch(targetRoleId).catch(() => null);
+
+                if (role && !member.roles.cache.has(targetRoleId)) {
+                    await member.roles.add(role, "Accepted department application auto-role").catch(() => {});
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Failed department auto-role assignment on join:", error);
     }
 
     const memberName = getMemberDisplayName(member);

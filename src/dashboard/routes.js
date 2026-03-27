@@ -44,6 +44,28 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     const GUILD_ID = process.env.GUILD_ID;
     const LOA_ROLE_ID = "1482203107806150668";
     const router   = Router();
+    const DEPARTMENT_INVITE_LINKS = {
+        "1482203107432595601": "https://discord.gg/qmwhsPwEDy", // HCSO
+        "1482498655523962892": "https://discord.gg/MR7RgZA4qS", // FHP
+        "1482501585803415572": "https://discord.gg/bRakG4SdRc"  // CPD
+    };
+
+    function getDepartmentInviteLinkForApp(app) {
+        if (!app || app.type !== "department") return null;
+
+        const departments = getAllDepartments();
+        const appGuildId = String(app.departmentGuildId || "");
+        if (DEPARTMENT_INVITE_LINKS[appGuildId]) return DEPARTMENT_INVITE_LINKS[appGuildId];
+
+        const appShortName = String(departments[appGuildId]?.shortName || "").toUpperCase();
+        if (!appShortName) return null;
+
+        for (const [guildId, link] of Object.entries(DEPARTMENT_INVITE_LINKS)) {
+            if (String(departments[guildId]?.shortName || "").toUpperCase() === appShortName) return link;
+        }
+
+        return null;
+    }
 
     function getDashboardLogChannelId(guildId, logType) {
         const channels = config.logChannels || {};
@@ -584,7 +606,9 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             const applicant = await client.users.fetch(app.applicantId).catch(() => null);
             if (applicant) {
                 if (decision === "accepted") {
-                    await applicant.send(`✅ Application accepted. Your application for **${app.departmentName || "Staff Application"}** has been accepted by <@${req.session.user.id}>.`).catch(() => {});
+                    const inviteLink = getDepartmentInviteLinkForApp(app);
+                    const inviteLine = inviteLink ? `\nJoin your department server: ${inviteLink}` : "";
+                    await applicant.send(`✅ Application accepted. Your application for **${app.departmentName || "Staff Application"}** has been accepted by <@${req.session.user.id}>.${inviteLine}`).catch(() => {});
                 } else {
                     await applicant.send(`❌ Application denied. Your application for **${app.departmentName || "Staff Application"}** was denied for the reason: ${reason}`).catch(() => {});
                 }
