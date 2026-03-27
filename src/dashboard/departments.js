@@ -19,8 +19,14 @@ import { getAllDepartments, getBranding } from "../embeds/departmentThemes.js";
  *           MAX_STRIKES: number }} deps
  * @returns {import("express").Router}
  */
-export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats, client, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES, patrols, loa, casesData }) {
+export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats, client, config, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES, patrols, loa, casesData }) {
     const router = Router();
+    const STRIKE_ROLE_IDS = [
+        "1485084924921774242",
+        "1485084972535648326",
+        "1485085025157382244"
+    ];
+    const SHERIFF_ALERT_ROLE_ID = "1482203108108013584";
 
     // ── All servers / departments overview ────────────────────────────────────
         // -- Joint Operations --
@@ -56,7 +62,9 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
             const totalStrikes = deptGuilds.reduce((s, g) => s + g.strikeCount, 0);
             const totalPatrols = patrols   ? Object.values(patrols).filter(p => p.active).length : 0;
             const totalLOAs    = loa       ? Object.values(loa).filter(l => l.onLOA).length      : 0;
-            const openCases    = casesData ? Object.values(casesData.cases || {}).filter(c => c.status === "open").length : 0;
+            const openCases    = casesData
+                ? Object.values(casesData.cases || {}).filter(c => (c.status ? c.status !== "closed" : !c.closed)).length
+                : 0;
 
             res.render("joint", { page: "joint", deptGuilds, totalMembers, totalStrikes, totalPatrols, totalLOAs, openCases, branding });
         } catch (err) {
@@ -124,17 +132,21 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
                     members = memberList
                         .filter(m => !m.user.bot)
                         .map(m => {
-                            const userStrikes = getUserStrikeEntries ? getUserStrikeEntries(guildId, m.id) : [];
+                            const highestRole = [...m.roles.cache.values()]
+                                .filter(r => r.name !== "@everyone")
+                                .sort((a, b) => b.position - a.position)[0];
+
+                            const strikeCountByRole = STRIKE_ROLE_IDS.reduce((count, roleId) => {
+                                return count + (m.roles.cache.has(roleId) ? 1 : 0);
+                            }, 0);
+
                             return {
                                 id:          m.id,
                                 name:        m.displayName || m.user.username,
                                 username:    m.user.username,
                                 avatar:      m.user.displayAvatarURL({ size: 32 }),
-                                roles:       m.roles.cache
-                                                 .filter(r => r.name !== "@everyone")
-                                                 .map(r => r.name)
-                                                 .slice(0, 3),
-                                strikeCount: userStrikes.length,
+                                highestRole: highestRole?.name || "No department role",
+                                strikeCount: strikeCountByRole,
                                 joinedAt:    m.joinedAt ? m.joinedAt.toLocaleDateString() : "Unknown",
                                 timedOut:    m.communicationDisabledUntilTimestamp
                                                  ? m.communicationDisabledUntilTimestamp > Date.now()
@@ -187,6 +199,31 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
             entries.push({ reason, givenBy: req.session.user.id, date: new Date().toISOString() });
             saveStrikes();
             if (syncUserStrikeRoles) await syncUserStrikeRoles(guild, userId, entries.length);
+
+            const memberAfterStrike = await guild.members.fetch(userId).catch(() => null);
+            const hasAllThreeStrikeRoles = memberAfterStrike
+                ? STRIKE_ROLE_IDS.every(roleId => memberAfterStrike.roles.cache.has(roleId))
+                : false;
+
+            if (hasAllThreeStrikeRoles) {
+                const strikeLogChannelId = (function getStrikeLogChannelId() {
+                    const channels = config.logChannels || {};
+                    const guildScoped = channels[guildId] && typeof channels[guildId] === "object" ? channels[guildId] : null;
+                    if (guildScoped && guildScoped.strike) return guildScoped.strike;
+                    return channels.strike || channels.moderation || null;
+                })();
+
+                const alertChannel = strikeLogChannelId
+                    ? (client.channels.cache.get(strikeLogChannelId) || await client.channels.fetch(strikeLogChannelId).catch(() => null))
+                    : null;
+
+                if (alertChannel && alertChannel.isTextBased()) {
+                    await alertChannel.send({
+                        content: `<@&${SHERIFF_ALERT_ROLE_ID}> <@${userId}> now has all three strike roles.`
+                    }).catch(() => {});
+                }
+            }
+
             res.json({ success: true, totalStrikes: entries.length });
         } catch (err) {
             res.status(500).json({ error: err.message });

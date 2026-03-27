@@ -164,13 +164,7 @@
             </td>
             <td class="col-roles" style="font-size:12px;color:var(--text-muted);">
               <div class="role-cell">
-                <% if (m.roles && m.roles.length) { %>
-                  <% m.roles.slice(0,4).forEach(function(r){ %>
-                    <span class="role-pill" title="<%= r %>"><%= r %></span>
-                  <% }); %>
-                <% } else { %>
-                  <span style="color:var(--text-muted);font-size:11px;">No department roles</span>
-                <% } %>
+                <span class="role-pill" title="<%= m.highestRole %>"><%= m.highestRole %></span>
               </div>
             </td>
             <td class="col-strikes">

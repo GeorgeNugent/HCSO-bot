@@ -166,6 +166,7 @@ export function startDashboard(context) {
         segmentGuard,
         serverStats,
         client,
+        config:               context.config,
         strikes:              context.strikes,
         saveStrikes:          context.saveStrikes,
         getUserStrikeEntries: context.getUserStrikeEntries,
