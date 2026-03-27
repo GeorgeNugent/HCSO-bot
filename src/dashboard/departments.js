@@ -24,6 +24,8 @@ import { getAllDepartments, getBranding, resolveDepartmentForGuild } from "../em
 export function createDepartmentRoutes({ requireAuth, requireStaff, segmentGuard, serverStats, BOT_OWNER_IDS = [], client, config, saveConfig, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, ROLE_SOURCE_GUILD_ID, MAX_STRIKES, patrols, loa, casesData, saveCases, saveLOA }) {
     const router = Router();
     const HCSO_GUILD_ID = "1482203107432595601";
+    const CPD_GUILD_ID = "1482501585803415572";
+    const FHP_GUILD_ID = "1482498655523962892";
     const STRIKE_ROLE_IDS = [
         "1485084924921774242",
         "1485084972535648326",
@@ -32,6 +34,27 @@ export function createDepartmentRoutes({ requireAuth, requireStaff, segmentGuard
     const SHERIFF_ALERT_ROLE_ID = "1482203108108013584";
     const DEFAULT_ROLE_SOURCE_GUILD_ID = "1318018654515888138";
     const roleSourceGuildId = String(ROLE_SOURCE_GUILD_ID || DEFAULT_ROLE_SOURCE_GUILD_ID);
+    const DEFAULT_DEPARTMENT_ROLE_SOURCE_BY_GUILD = {
+        [HCSO_GUILD_ID]: HCSO_GUILD_ID,
+        [CPD_GUILD_ID]: CPD_GUILD_ID,
+        [FHP_GUILD_ID]: FHP_GUILD_ID
+    };
+
+    function getDepartmentRoleSourceByGuild() {
+        const configured = config.departmentRoleSourceByGuild && typeof config.departmentRoleSourceByGuild === "object"
+            ? config.departmentRoleSourceByGuild
+            : {};
+
+        return {
+            ...DEFAULT_DEPARTMENT_ROLE_SOURCE_BY_GUILD,
+            ...configured
+        };
+    }
+
+    function getRoleSourceGuildIdForDepartment(departmentGuildId) {
+        const map = getDepartmentRoleSourceByGuild();
+        return String(map[String(departmentGuildId || "")] || roleSourceGuildId);
+    }
 
     function isSupervisorPlus(member) {
         if (!member) return false;
@@ -335,7 +358,8 @@ export function createDepartmentRoutes({ requireAuth, requireStaff, segmentGuard
         if (rolePolicies.length === 0) return true;
 
         for (const policy of rolePolicies) {
-            const candidateGuildIds = [...new Set([policy.guildId, roleSourceGuildId].map(id => String(id || "")).filter(Boolean))];
+            const policyRoleSourceGuildId = getRoleSourceGuildIdForDepartment(policy.guildId);
+            const candidateGuildIds = [...new Set([policy.guildId, policyRoleSourceGuildId].map(id => String(id || "")).filter(Boolean))];
             for (const candidateGuildId of candidateGuildIds) {
                 const roleIds = await getRoleIdsForViewerInGuild(userId, candidateGuildId);
                 if (policy.allowedRoleIds.some(roleId => roleIds.includes(roleId))) {
@@ -763,8 +787,9 @@ export function createDepartmentRoutes({ requireAuth, requireStaff, segmentGuard
             const guild = await getGuild(guildId);
             if (!guild) return res.status(404).json({ error: "Guild not found" });
 
-            // Fetch roles from role source guild (usually the main server).
-            const mainGuild = await getGuild(roleSourceGuildId);
+            // Fetch roles from the department's designated role source guild.
+            const sourceGuildId = getRoleSourceGuildIdForDepartment(guildId);
+            const mainGuild = await getGuild(sourceGuildId);
             if (!mainGuild) return res.status(404).json({ error: "Guild not found" });
 
             const mainServerRoles = (await mainGuild.roles.fetch().catch(() => null))?.map(r => ({

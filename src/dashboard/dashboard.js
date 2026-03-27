@@ -36,9 +36,17 @@ export function startDashboard(context) {
     const port           = context.port || Number(process.env.PORT) || 8100;
     const GUILD_ID       = process.env.GUILD_ID;
     const MAIN_ROLE_GUILD_ID = "1318018654515888138";
+    const HCSO_GUILD_ID = "1482203107432595601";
+    const CPD_GUILD_ID = "1482501585803415572";
+    const FHP_GUILD_ID = "1482498655523962892";
     const BOT_OWNER_IDS = ["967375704486449222", "327951443090735104"];
     const PRIMARY_BOT_OWNER_ID = BOT_OWNER_IDS[0];
     const DASHBOARD_SEGMENTS = ["home", "status", "commands", "logs", "settings", "applications", "departments"];
+    const DEFAULT_DEPARTMENT_ROLE_SOURCE_BY_GUILD = {
+        [HCSO_GUILD_ID]: HCSO_GUILD_ID,
+        [CPD_GUILD_ID]: CPD_GUILD_ID,
+        [FHP_GUILD_ID]: FHP_GUILD_ID
+    };
     const STAFF_ROLE_KEYWORDS = [
         "administrator", "management", "developer", "bot staff",
         "supervisor", "ia", "sheriff", "staff", "owner", "co-owner"
@@ -149,8 +157,8 @@ export function startDashboard(context) {
             ? context.config.departmentAccessByGuild
             : {};
         const departmentRoleSourceByGuild = context.config?.departmentRoleSourceByGuild && typeof context.config.departmentRoleSourceByGuild === "object"
-            ? context.config.departmentRoleSourceByGuild
-            : {};
+            ? { ...DEFAULT_DEPARTMENT_ROLE_SOURCE_BY_GUILD, ...context.config.departmentRoleSourceByGuild }
+            : { ...DEFAULT_DEPARTMENT_ROLE_SOURCE_BY_GUILD };
         const configuredDepartments = getAllDepartments();
         const allowedDepartmentShortNames = new Set(["HCSO", "FHP", "CPD"]);
 
