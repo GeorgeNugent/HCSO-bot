@@ -642,14 +642,14 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
             if (!guild) return res.status(404).json({ error: "Guild not found" });
 
             // Fetch roles from MAIN server (not the department guild)
-            const mainGuild = client.guilds.cache.get("1300239835293814925");
-            if (!mainGuild) return res.status(404).json({ error: "Main server not found" });
+            const mainGuild = client.guilds.cache.get(guildId);
+            if (!mainGuild) return res.status(404).json({ error: "Guild not found" });
 
             const mainServerRoles = (await mainGuild.roles.fetch().catch(() => null))?.map(r => ({
                 id: r.id,
                 name: r.name,
                 color: r.hexColor || '#808080'
-            })).filter(r => r.name !== '@everyone') || [];
+            })).filter(r => r.name !== '@everyone').sort((a, b) => a.name.localeCompare(b.name)) || [];
 
             // Get current department access config for this guild
             const departmentAccessByGuild = config.departmentAccessByGuild || {};
