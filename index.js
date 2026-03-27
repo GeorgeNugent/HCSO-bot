@@ -6,13 +6,14 @@ try {
 } catch (e) {
     console.warn("[Startup] Git sync skipped:", e.message);
 }
-import { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ActivityType, ChannelType, AuditLogEvent } from "discord.js";
+import { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ActivityType, ChannelType, AuditLogEvent, StringSelectMenuBuilder } from "discord.js";
 import fs from "fs";
 import path from "node:path";
 import sharp from "sharp";
 import { createTicketSystem, ticketCommands } from "./ticket-system.js";
 import { startDashboard } from "./dashboard.js";
 import { createDepartmentEmbed, getDepartmentName } from "./src/embeds/embedHandler.js";
+import { getAllDepartments } from "./src/embeds/departmentThemes.js";
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
@@ -78,6 +79,7 @@ const loa = readJsonData("loa.json", {});
 const casesData = readJsonData("cases.json", { cases: {} });
 const reports = readJsonData("reports.json", {});
 let tickets = readJsonData("tickets.json", { tickets: {} });
+const applicationsData = readJsonData("applications.json", { counter: 0, applications: {}, activeSessions: {} });
 
 function isCaseClosed(entry) {
     if (!entry) return false;
@@ -215,6 +217,10 @@ function saveTickets() {
     writeJsonData("tickets.json", tickets);
 }
 
+function saveApplications() {
+    writeJsonData("applications.json", applicationsData);
+}
+
 function saveNotes() {
     writeJsonData("notes.json", notesData);
 }
@@ -241,11 +247,27 @@ function save() {
     savePatrols();
     saveLOA();
     saveCases();
+    saveApplications();
     saveReports();
     saveTickets();
     saveBlacklists();
     saveConfig();
 }
+
+function ensureApplicationsData() {
+    if (!applicationsData || typeof applicationsData !== "object") return;
+    if (!applicationsData.applications || typeof applicationsData.applications !== "object" || Array.isArray(applicationsData.applications)) {
+        applicationsData.applications = {};
+    }
+    if (!applicationsData.activeSessions || typeof applicationsData.activeSessions !== "object" || Array.isArray(applicationsData.activeSessions)) {
+        applicationsData.activeSessions = {};
+    }
+    if (typeof applicationsData.counter !== "number" || Number.isNaN(applicationsData.counter)) {
+        applicationsData.counter = 0;
+    }
+}
+
+ensureApplicationsData();
 
 const MAX_STRIKES = 3;
 const LOG_TYPES = ["patrol", "case", "moderation", "strike", "loa", "transcript", "timeout", "ban", "blacklist", "discord", "commendations", "memberjoin", "memberleave"];
@@ -267,6 +289,114 @@ const TRAINING_CERTIFICATION_ROLES = {
 const TRAINING_CERTIFICATION_ROLE_IDS = Object.values(TRAINING_CERTIFICATION_ROLES);
 const TRAINING_NO_CERT_ROLE_ID = "1482203107956883574";
 const LOA_ROLE_ID = "1482203107806150668";
+const APPLICATION_PANEL_BUTTON_ID = "app_open_apply";
+const APPLICATION_DEPT_SELECT_ID = "app_select_department";
+const APPLICATION_START_PREFIX = "app_start_";
+const APPLICATION_CANCEL_PREFIX = "app_cancel_";
+const APPLICATION_REVIEW_ACCEPT_PREFIX = "app_review_accept_";
+const APPLICATION_REVIEW_DENY_PREFIX = "app_review_deny_";
+
+const APPLICATION_QUESTIONS = [
+    "What's your name you will be going by? (First Name Last Initial)",
+    "Date of Birth (Month Day, Year). This will be your in-role-life date of birth.",
+    "Are you able to read, write, and speak in English Language?",
+    "Has your application ever been denied? If so, explain why and give an approximate date.",
+    "Have you previously been in this community? (Left/kicked and came back) If so, explain. If not, put N/A.",
+    "What tools or skills can you bring to the department? 3 full sentences at minimum.",
+    "Name your 3 strengths separated by commas.",
+    "Name your 3 weaknesses separated by commas.",
+    "Why should the department hire you? 3 full sentences at minimum.",
+    "Do you understand regardless of experience you will start off as Cadet until you prove yourself in-game during patrols?",
+    "List 3 different dates and times you're available for a Discord voice interview.",
+    "Do you understand if your application gets accepted, you have 14 days to complete your interview or your process will be terminated?"
+];
+
+function getDepartmentApplicationChoices() {
+    const departments = getAllDepartments();
+    const choices = [{ label: "Staff Application", value: "staff", description: "Apply for staff position" }];
+
+    for (const [guildId, dept] of Object.entries(departments || {})) {
+        if (!dept || dept.type === "main") continue;
+        choices.push({
+            label: dept.name || dept.shortName || guildId,
+            value: `dept:${guildId}`,
+            description: `Apply for ${dept.shortName || "department"}`
+        });
+    }
+
+    return choices.slice(0, 25);
+}
+
+function nextApplicationId() {
+    ensureApplicationsData();
+    applicationsData.counter += 1;
+    return `APP-${String(applicationsData.counter).padStart(6, "0")}`;
+}
+
+function buildApplicationRecord(user, selectionValue) {
+    const departments = getAllDepartments();
+    let targetType = "staff";
+    let departmentGuildId = null;
+    let departmentName = "Staff Application";
+
+    if (selectionValue.startsWith("dept:")) {
+        targetType = "department";
+        departmentGuildId = selectionValue.slice(5);
+        const dept = departments[departmentGuildId];
+        departmentName = dept?.name || dept?.shortName || departmentGuildId;
+    }
+
+    const applicationId = nextApplicationId();
+    return {
+        id: applicationId,
+        applicantId: user.id,
+        applicantTag: user.tag,
+        type: targetType,
+        departmentGuildId,
+        departmentName,
+        status: "in-progress",
+        startedAt: new Date().toISOString(),
+        submittedAt: null,
+        reviewedAt: null,
+        reviewedBy: null,
+        reviewDecision: null,
+        reviewReason: "",
+        answers: []
+    };
+}
+
+function getOpenApplicationSession(userId) {
+    ensureApplicationsData();
+    const session = applicationsData.activeSessions[userId];
+    if (!session) return null;
+    const app = applicationsData.applications[session.applicationId];
+    if (!app || app.status !== "in-progress") return null;
+    return { session, app };
+}
+
+async function sendApplicationQuestionDm(user, app, index) {
+    const question = APPLICATION_QUESTIONS[index];
+    const embed = new EmbedBuilder()
+        .setColor("#4ea8de")
+        .setTitle(app.departmentName)
+        .setDescription(`${index + 1}/${APPLICATION_QUESTIONS.length}. ${question}`)
+        .addFields({ name: "How to answer", value: "Send your answer in this DM. I will automatically move you to the next question." })
+        .setTimestamp();
+
+    await user.send({ embeds: [embed] });
+}
+
+async function sendApplicationDecisionDm(clientRef, app, acceptedBy, decision, reasonText) {
+    const targetUser = await clientRef.users.fetch(app.applicantId).catch(() => null);
+    if (!targetUser) return;
+
+    if (decision === "accepted") {
+        await targetUser.send(`✅ Application accepted. Your application for **${app.departmentName}** has been accepted by <@${acceptedBy}>.`).catch(() => {});
+        return;
+    }
+
+    await targetUser.send(`❌ Application denied. Your application for **${app.departmentName}** was denied for the reason: ${reasonText || "No reason provided."}`).catch(() => {});
+}
 
 function getGuildStrikeStore(guildId) {
     if (!guildId) return null;
@@ -1448,6 +1578,10 @@ const commands = [
         .setDescription("Open the Twin Palms Roleplay Control Panel (staff only)"),
 
     new SlashCommandBuilder()
+        .setName("application-panel")
+        .setDescription("Post the application panel for recruits"),
+
+    new SlashCommandBuilder()
         .setName("onlinedash")
         .setDescription("Post the web dashboard link in chat")
 
@@ -1663,6 +1797,113 @@ client.on("interactionCreate", async interaction => {
             const patrolLogChannelId = getLogChannelId(interaction.guildId, "patrol");
             const logChannel = patrolLogChannelId ? client.channels.cache.get(patrolLogChannelId) : null;
 
+            if (interaction.customId === APPLICATION_PANEL_BUTTON_ID) {
+                const options = getDepartmentApplicationChoices();
+                const select = new StringSelectMenuBuilder()
+                    .setCustomId(APPLICATION_DEPT_SELECT_ID)
+                    .setPlaceholder("Select what you want to apply for...")
+                    .addOptions(options.map(o => ({
+                        label: o.label,
+                        value: o.value,
+                        description: o.description
+                    })));
+
+                const row = new ActionRowBuilder().addComponents(select);
+                return interaction.reply({
+                    content: "Select the application type/department below.",
+                    components: [row],
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            if (interaction.customId.startsWith(APPLICATION_START_PREFIX)) {
+                const selection = interaction.customId.slice(APPLICATION_START_PREFIX.length);
+
+                const existing = getOpenApplicationSession(interaction.user.id);
+                if (existing) {
+                    return interaction.reply({
+                        content: `⚠️ You already have an active application (${existing.app.id}). Please finish or wait for review.`,
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                const app = buildApplicationRecord(interaction.user, selection);
+                applicationsData.applications[app.id] = app;
+                applicationsData.activeSessions[interaction.user.id] = {
+                    applicationId: app.id,
+                    currentQuestionIndex: 0,
+                    createdAt: new Date().toISOString()
+                };
+                saveApplications();
+
+                try {
+                    await sendApplicationQuestionDm(interaction.user, app, 0);
+                } catch {
+                    delete applicationsData.activeSessions[interaction.user.id];
+                    delete applicationsData.applications[app.id];
+                    saveApplications();
+                    return interaction.reply({
+                        content: "❌ I could not DM you. Please enable DMs and try again.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                return interaction.reply({
+                    content: "✅ Application started. Check your DMs and answer each question there. You have 60 minutes to complete it.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            if (interaction.customId.startsWith(APPLICATION_CANCEL_PREFIX)) {
+                return interaction.reply({
+                    content: "❌ Application cancelled.",
+                    flags: MessageFlags.Ephemeral
+                });
+            }
+
+            if (interaction.customId.startsWith(APPLICATION_REVIEW_ACCEPT_PREFIX) || interaction.customId.startsWith(APPLICATION_REVIEW_DENY_PREFIX)) {
+                if (!canAccessDashboard(interaction.member)) {
+                    return interaction.reply({
+                        content: "❌ You do not have permission to review applications.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                const isAccept = interaction.customId.startsWith(APPLICATION_REVIEW_ACCEPT_PREFIX);
+                const appId = interaction.customId.replace(isAccept ? APPLICATION_REVIEW_ACCEPT_PREFIX : APPLICATION_REVIEW_DENY_PREFIX, "");
+                const app = applicationsData.applications[appId];
+                if (!app || (app.status !== "pending" && app.status !== "in-review")) {
+                    return interaction.reply({
+                        content: "⚠️ This application is no longer pending review.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                if (!isAccept) {
+                    return interaction.reply({
+                        content: "Use the online dashboard to deny with a reason.",
+                        flags: MessageFlags.Ephemeral
+                    });
+                }
+
+                app.status = "accepted";
+                app.reviewDecision = "accepted";
+                app.reviewedBy = interaction.user.id;
+                app.reviewedAt = new Date().toISOString();
+                app.reviewReason = "Accepted in Discord";
+                saveApplications();
+
+                await sendApplicationDecisionDm(client, app, interaction.user.id, "accepted", "");
+
+                const acceptedEmbed = new EmbedBuilder()
+                    .setColor("#23a559")
+                    .setTitle("✅ Application accepted")
+                    .setDescription(`Your application for **${app.departmentName}** has been accepted by <@${interaction.user.id}>.`)
+                    .setTimestamp();
+
+                return interaction.update({ embeds: [acceptedEmbed], components: [] });
+            }
+
             if (interaction.customId === "start_patrol") {
                 const deputyId = interaction.user.id;
 
@@ -1865,6 +2106,30 @@ client.on("interactionCreate", async interaction => {
                 flags: MessageFlags.Ephemeral
             }).catch(() => {});
         }
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId === APPLICATION_DEPT_SELECT_ID) {
+        const selected = interaction.values && interaction.values[0] ? interaction.values[0] : null;
+        if (!selected) {
+            return interaction.reply({ content: "❌ No option selected.", flags: MessageFlags.Ephemeral });
+        }
+
+        const choices = getDepartmentApplicationChoices();
+        const selectedChoice = choices.find(c => c.value === selected);
+        const label = selectedChoice?.label || selected;
+
+        const confirmEmbed = new EmbedBuilder()
+            .setColor("#4ea8de")
+            .setTitle(label)
+            .setDescription("Are you sure you want to apply?\n\nOnce you start the application I will send you a series of questions in DMs. You will have 60 minutes to complete it.")
+            .setTimestamp();
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`${APPLICATION_START_PREFIX}${selected}`).setLabel("Start application").setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`${APPLICATION_CANCEL_PREFIX}${selected}`).setLabel("Cancel application").setStyle(ButtonStyle.Danger)
+        );
+
+        return interaction.reply({ embeds: [confirmEmbed], components: [row], flags: MessageFlags.Ephemeral });
     }
 
     // Force End Patrol button handler
@@ -5583,6 +5848,32 @@ client.on("interactionCreate", async interaction => {
             });
         }
     }
+
+    if (interaction.commandName === "application-panel") {
+        if (!interaction.guild || !interaction.member || !canAccessDashboard(interaction.member)) {
+            return interaction.reply({
+                content: "❌ You don't have permission to post the application panel.",
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        const panelEmbed = new EmbedBuilder()
+            .setColor("#4ea8de")
+            .setTitle("📝 Emergency Service Applications")
+            .setDescription("To apply for a department or team, click **Apply** below.\n\nYour interview questions will be sent in DMs and your answers will be reviewed in the online dashboard by staff and command.")
+            .addFields({ name: "Apply", value: "Click the button below to begin your application." })
+            .setTimestamp();
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(APPLICATION_PANEL_BUTTON_ID)
+                .setLabel("Apply")
+                .setStyle(ButtonStyle.Primary)
+        );
+
+        await interaction.reply({ embeds: [panelEmbed], components: [row] });
+        return;
+    }
     } catch (error) {
         console.error(error);
         await safeInteractionErrorReply(interaction, `Error: ${error.message}`);
@@ -5844,6 +6135,62 @@ client.on("messageCreate", async message => {
     if (!normalized.startsWith(">")) return;
 
     const commandMatch = normalized.match(/^>\s*([a-z0-9_-]+)/);
+
+// Handle DM application interview answers
+client.on("messageCreate", async message => {
+    if (message.author.bot) return;
+    if (message.guild) return;
+
+    const active = getOpenApplicationSession(message.author.id);
+    if (!active) return;
+
+    const { session, app } = active;
+    const answer = String(message.content || "").trim();
+    if (!answer) return;
+
+    const startedAtMs = new Date(app.startedAt || Date.now()).getTime();
+    const expired = Date.now() - startedAtMs > 60 * 60 * 1000;
+    if (expired) {
+        app.status = "expired";
+        delete applicationsData.activeSessions[message.author.id];
+        saveApplications();
+        await message.channel.send("⏰ Your application session expired after 60 minutes. Start a new one from the application panel.").catch(() => {});
+        return;
+    }
+
+    const questionIndex = Number(session.currentQuestionIndex) || 0;
+    const question = APPLICATION_QUESTIONS[questionIndex];
+    if (!question) {
+        app.status = "pending";
+        app.submittedAt = new Date().toISOString();
+        delete applicationsData.activeSessions[message.author.id];
+        saveApplications();
+        await message.channel.send("✅ Your application was submitted successfully.").catch(() => {});
+        return;
+    }
+
+    app.answers.push({
+        index: questionIndex + 1,
+        question,
+        answer,
+        answeredAt: new Date().toISOString()
+    });
+
+    session.currentQuestionIndex = questionIndex + 1;
+
+    if (session.currentQuestionIndex >= APPLICATION_QUESTIONS.length) {
+        app.status = "pending";
+        app.submittedAt = new Date().toISOString();
+        delete applicationsData.activeSessions[message.author.id];
+        saveApplications();
+
+        await message.channel.send("✅ Application submitted. Staff and command can now review it from the online dashboard.").catch(() => {});
+        return;
+    }
+
+    saveApplications();
+    await sendApplicationQuestionDm(message.author, app, session.currentQuestionIndex).catch(() => {});
+});
     const command = commandMatch ? commandMatch[1] : "";
 
     // >addrank command
@@ -5897,12 +6244,14 @@ startDashboard({
     patrols,
     loa,
     casesData,
+    applicationsData,
     tickets,
     blacklists,
     commendationsData,
     saveStrikes,
     saveLOA,
     saveCases,
+    saveApplications,
     saveConfig,
     getUserStrikeEntries,
     syncUserStrikeRoles,

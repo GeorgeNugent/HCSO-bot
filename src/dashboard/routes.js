@@ -4,7 +4,7 @@
  */
 import { Router } from "express";
 import { ActivityType, EmbedBuilder } from "discord.js";
-import { getBranding } from "../embeds/departmentThemes.js";
+import { getAllDepartments, getBranding } from "../embeds/departmentThemes.js";
 
 /**
  * @param {Object}   context   - Shared bot state passed in from index.js
@@ -26,12 +26,14 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         patrols,
         loa,
         casesData,
+        applicationsData,
         tickets,
         blacklists,
         config,
         saveStrikes,
         saveLOA,
         saveCases,
+        saveApplications,
         saveConfig,
         getUserStrikeEntries,
         syncUserStrikeRoles,
@@ -328,6 +330,31 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         });
     });
 
+    // ── Applications page ────────────────────────────────────────────────────
+    router.get("/applications", requireStaff, segmentGuard("applications"), async (req, res) => {
+        const departments = getAllDepartments();
+        const allApplications = Object.values(applicationsData?.applications || {})
+            .sort((a, b) => new Date(b.startedAt || 0).getTime() - new Date(a.startedAt || 0).getTime());
+
+        const staffApplications = allApplications.filter(a => a.type === "staff");
+        const departmentApplications = allApplications.filter(a => a.type === "department");
+
+        const summary = {
+            total: allApplications.length,
+            pending: allApplications.filter(a => a.status === "pending").length,
+            accepted: allApplications.filter(a => a.status === "accepted").length,
+            denied: allApplications.filter(a => a.status === "denied").length
+        };
+
+        res.render("applications", {
+            page: "applications",
+            departments,
+            staffApplications,
+            departmentApplications,
+            summary
+        });
+    });
+
     async function getBotOwnerAccessViewModel(req) {
         const mainGuild = await getMainRoleGuild();
         const availableRoles = mainGuild
@@ -389,6 +416,46 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             roleSourceGuildId: ownerVm.roleSourceGuildId,
             roleSourceGuildName: ownerVm.roleSourceGuildName
         });
+    });
+
+    // ── API: Applications review ─────────────────────────────────────────────
+    router.post("/api/applications/review", requireStaff, segmentGuard("applications"), async (req, res) => {
+        try {
+            const appId = String(req.body?.applicationId || "").trim();
+            const decision = String(req.body?.decision || "").trim().toLowerCase();
+            const reason = String(req.body?.reason || "").trim();
+
+            if (!appId) return res.status(400).json({ error: "applicationId required" });
+            if (decision !== "accepted" && decision !== "denied") return res.status(400).json({ error: "decision must be accepted or denied" });
+            if (decision === "denied" && !reason) return res.status(400).json({ error: "reason required when denying" });
+
+            const app = applicationsData?.applications?.[appId];
+            if (!app) return res.status(404).json({ error: "Application not found" });
+            if (!["pending", "in-review", "in-progress"].includes(app.status)) {
+                return res.status(400).json({ error: `Application is already ${app.status}` });
+            }
+
+            app.status = decision;
+            app.reviewDecision = decision;
+            app.reviewReason = reason;
+            app.reviewedBy = req.session.user.id;
+            app.reviewedAt = new Date().toISOString();
+            saveApplications();
+
+            const applicant = await client.users.fetch(app.applicantId).catch(() => null);
+            if (applicant) {
+                if (decision === "accepted") {
+                    await applicant.send(`✅ Application accepted. Your application for **${app.departmentName || "Staff Application"}** has been accepted by <@${req.session.user.id}>.`).catch(() => {});
+                } else {
+                    await applicant.send(`❌ Application denied. Your application for **${app.departmentName || "Staff Application"}** was denied for the reason: ${reason}`).catch(() => {});
+                }
+            }
+
+            res.json({ success: true, message: `Application ${appId} ${decision}.` });
+        } catch (err) {
+            console.error("[Dashboard API] applications/review:", err.message);
+            res.status(500).json({ error: err.message });
+        }
     });
 
     // ── API: Strike ───────────────────────────────────────────────────────────

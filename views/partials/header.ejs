@@ -54,6 +54,8 @@
           <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
         </a>
       <% } %>
+
+      <div class="sidebar-section-label" style="margin-top:8px;">Staff</div>
       <% if (!segmentAccess || segmentAccess.status) { %>
         <a href="/status"   class="nav-link <%= page === 'status'     ? 'active' : '' %>">
           <span class="nav-icon">📊</span><span class="nav-label">Bot Status</span>
@@ -67,6 +69,11 @@
       <% if (!segmentAccess || segmentAccess.logs) { %>
         <a href="/logs"     class="nav-link <%= page === 'logs'       ? 'active' : '' %>">
           <span class="nav-icon">📋</span><span class="nav-label">Logs</span>
+        </a>
+      <% } %>
+      <% if (!segmentAccess || segmentAccess.applications) { %>
+        <a href="/applications" class="nav-link <%= page === 'applications' ? 'active' : '' %>">
+          <span class="nav-icon">📝</span><span class="nav-label">Applications</span>
         </a>
       <% } %>
       <% if (!segmentAccess || segmentAccess.settings) { %>

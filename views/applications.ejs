@@ -1,0 +1,235 @@
+<%- include('partials/header') %>
+
+<style>
+  .apps-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .apps-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .apps-stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+  }
+  .apps-stat-value {
+    font-size: 26px;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .apps-stat-label {
+    margin-top: 6px;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+  .apps-table-wrap {
+    overflow-x: auto;
+  }
+  .apps-table {
+    width: 100%;
+    min-width: 860px;
+    border-collapse: collapse;
+  }
+  .apps-table th,
+  .apps-table td {
+    text-align: left;
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    font-size: 13px;
+  }
+  .apps-table th {
+    color: var(--text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+  .apps-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    font-weight: 700;
+    font-size: 11px;
+  }
+  .apps-badge.pending { color: #f6c453; border-color: #f6c45355; }
+  .apps-badge.accepted { color: #56d87d; border-color: #56d87d55; }
+  .apps-badge.denied { color: #ff7b7b; border-color: #ff7b7b55; }
+  .apps-badge.in-progress { color: #8db4ff; border-color: #8db4ff55; }
+  .answer-block {
+    max-height: 180px;
+    overflow: auto;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface2);
+    font-size: 12px;
+    white-space: pre-wrap;
+  }
+  .app-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .inline-deny {
+    margin-top: 8px;
+    display: none;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .inline-deny input {
+    min-width: 180px;
+    flex: 1;
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 8px 12px;
+  }
+</style>
+
+<div class="page-header">
+  <h2 class="page-title">📝 Applications</h2>
+  <p class="page-subtitle">Review staff and department applications. Accept or deny with a reason.</p>
+</div>
+
+<div class="apps-layout">
+  <div class="apps-summary">
+    <div class="apps-stat"><div class="apps-stat-value"><%= summary.total %></div><div class="apps-stat-label">Total</div></div>
+    <div class="apps-stat"><div class="apps-stat-value"><%= summary.pending %></div><div class="apps-stat-label">Pending</div></div>
+    <div class="apps-stat"><div class="apps-stat-value"><%= summary.accepted %></div><div class="apps-stat-label">Accepted</div></div>
+    <div class="apps-stat"><div class="apps-stat-value"><%= summary.denied %></div><div class="apps-stat-label">Denied</div></div>
+  </div>
+
+  <div class="section-card">
+    <h3 class="section-title">Staff Queue</h3>
+    <div class="apps-table-wrap">
+      <table class="apps-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Applicant</th>
+            <th>Status</th>
+            <th>Submitted</th>
+            <th>Answers</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (!staffApplications.length) { %>
+            <tr><td colspan="6" class="text-muted">No staff applications yet.</td></tr>
+          <% } %>
+          <% staffApplications.forEach(function(app){ %>
+            <tr>
+              <td><strong><%= app.id %></strong></td>
+              <td><%= app.applicantTag || app.applicantId %><br><span class="text-muted"><%= app.applicantId %></span></td>
+              <td><span class="apps-badge <%= app.status %>"><%= app.status %></span></td>
+              <td><%= app.submittedAt ? new Date(app.submittedAt).toLocaleString() : 'Not submitted' %></td>
+              <td>
+                <div class="answer-block"><%=(app.answers||[]).map(function(a){ return a.index + '. ' + a.question + '\n→ ' + a.answer; }).join('\n\n') || 'No answers yet.' %></div>
+              </td>
+              <td>
+                <div class="app-actions">
+                  <button class="btn btn-success btn-sm" onclick="reviewApplication('<%= app.id %>','accepted')">Accept</button>
+                  <button class="btn btn-danger btn-sm" onclick="toggleDeny('<%= app.id %>')">Deny</button>
+                </div>
+                <div class="inline-deny" id="deny-<%= app.id %>">
+                  <input id="deny-reason-<%= app.id %>" placeholder="Reason for denial">
+                  <button class="btn btn-danger btn-sm" onclick="reviewApplication('<%= app.id %>','denied',document.getElementById('deny-reason-<%= app.id %>').value)">Submit</button>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <h3 class="section-title">Department Queue</h3>
+    <div class="apps-table-wrap">
+      <table class="apps-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Department</th>
+            <th>Applicant</th>
+            <th>Status</th>
+            <th>Submitted</th>
+            <th>Answers</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (!departmentApplications.length) { %>
+            <tr><td colspan="7" class="text-muted">No department applications yet.</td></tr>
+          <% } %>
+          <% departmentApplications.forEach(function(app){ %>
+            <tr>
+              <td><strong><%= app.id %></strong></td>
+              <td><%= app.departmentName || app.departmentGuildId || 'Unknown' %></td>
+              <td><%= app.applicantTag || app.applicantId %><br><span class="text-muted"><%= app.applicantId %></span></td>
+              <td><span class="apps-badge <%= app.status %>"><%= app.status %></span></td>
+              <td><%= app.submittedAt ? new Date(app.submittedAt).toLocaleString() : 'Not submitted' %></td>
+              <td>
+                <div class="answer-block"><%=(app.answers||[]).map(function(a){ return a.index + '. ' + a.question + '\n→ ' + a.answer; }).join('\n\n') || 'No answers yet.' %></div>
+              </td>
+              <td>
+                <div class="app-actions">
+                  <button class="btn btn-success btn-sm" onclick="reviewApplication('<%= app.id %>','accepted')">Accept</button>
+                  <button class="btn btn-danger btn-sm" onclick="toggleDeny('dept-<%= app.id %>')">Deny</button>
+                </div>
+                <div class="inline-deny" id="deny-dept-<%= app.id %>">
+                  <input id="deny-reason-dept-<%= app.id %>" placeholder="Reason for denial">
+                  <button class="btn btn-danger btn-sm" onclick="reviewApplication('<%= app.id %>','denied',document.getElementById('deny-reason-dept-<%= app.id %>').value)">Submit</button>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  function toggleDeny(id) {
+    var el = document.getElementById('deny-' + id);
+    if (!el) return;
+    el.style.display = el.style.display === 'flex' ? 'none' : 'flex';
+  }
+
+  async function reviewApplication(applicationId, decision, reason) {
+    if (decision === 'denied' && !String(reason || '').trim()) {
+      alert('Please enter a deny reason.');
+      return;
+    }
+    try {
+      var res = await fetch('/api/applications/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ applicationId: applicationId, decision: decision, reason: reason || '' })
+      });
+      var data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Review action failed');
+        return;
+      }
+      location.reload();
+    } catch (err) {
+      alert('Request failed: ' + err.message);
+    }
+  }
+</script>
+
+<%- include('partials/footer') %>

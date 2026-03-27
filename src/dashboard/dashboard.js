@@ -37,7 +37,7 @@ export function startDashboard(context) {
     const GUILD_ID       = process.env.GUILD_ID;
     const MAIN_ROLE_GUILD_ID = "1482203107432595601";
     const BOT_OWNER_ID = "967375704486449222";
-    const DASHBOARD_SEGMENTS = ["home", "status", "commands", "logs", "settings", "departments"];
+    const DASHBOARD_SEGMENTS = ["home", "status", "commands", "logs", "settings", "applications", "departments"];
 
     // ── Express app ──────────────────────────────────────────────────────────
     const app = express();
