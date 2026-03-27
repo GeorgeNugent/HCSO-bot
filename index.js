@@ -1734,7 +1734,11 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("onlinedash")
-        .setDescription("Post the web dashboard link in chat")
+        .setDescription("Post the web dashboard link in chat"),
+
+    new SlashCommandBuilder()
+        .setName("clearapplications")
+        .setDescription("[Bot Owner] Cancel and clear all current applications")
 
 ].map(c => c.toJSON());
 
@@ -6167,6 +6171,24 @@ client.on("interactionCreate", async interaction => {
                 flags: MessageFlags.Ephemeral
             });
         }
+    }
+
+    if (interaction.commandName === "clearapplications") {
+        if (!interaction.guild || !interaction.member || !canAccessBotOwner(interaction.member)) {
+            return interaction.reply({
+                content: "❌ Only the bot owner can use this command.",
+                flags: MessageFlags.Ephemeral
+            });
+        }
+        const appCount = Object.keys(applicationsData.applications || {}).length;
+        const sessionCount = Object.keys(applicationsData.activeSessions || {}).length;
+        applicationsData.applications = {};
+        applicationsData.activeSessions = {};
+        saveApplications();
+        return interaction.reply({
+            content: `✅ Cleared **${appCount}** application(s) and **${sessionCount}** active session(s).`,
+            flags: MessageFlags.Ephemeral
+        });
     }
 
     if (interaction.commandName === "application-panel") {
