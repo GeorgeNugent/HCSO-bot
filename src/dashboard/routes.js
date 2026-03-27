@@ -260,6 +260,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             botOwnerId: BOT_OWNER_ID,
             currentUserId: req.session.user?.id || null,
             roleSourceGuildId: ROLE_SOURCE_GUILD_ID,
+            roleSourceGuildName: mainGuild?.name || "Hendry County Sheriff's Office",
             dashboardSegmentAccess
         };
     }
@@ -297,7 +298,8 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             isBotOwner: ownerVm.isBotOwner,
             botOwnerId: ownerVm.botOwnerId,
             currentUserId: ownerVm.currentUserId,
-            roleSourceGuildId: ownerVm.roleSourceGuildId
+            roleSourceGuildId: ownerVm.roleSourceGuildId,
+            roleSourceGuildName: ownerVm.roleSourceGuildName
         });
     });
 
