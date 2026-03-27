@@ -88,7 +88,16 @@ export function startDashboard(context) {
     // ── Mount routers ─────────────────────────────────────────────────────────
     app.use(createAuthRouter(context, { getDashboardGuild, requireAuth }));
     app.use(createMainRoutes(context,  { requireAuth, requireStaff, getDashboardGuild }));
-    app.use(createDepartmentRoutes({ requireStaff, serverStats, client }));
+    app.use(createDepartmentRoutes({
+        requireStaff,
+        serverStats,
+        client,
+        strikes:              context.strikes,
+        saveStrikes:          context.saveStrikes,
+        getUserStrikeEntries: context.getUserStrikeEntries,
+        syncUserStrikeRoles:  context.syncUserStrikeRoles,
+        MAX_STRIKES:          context.MAX_STRIKES
+    }));
 
     // ── 404 fallback ─────────────────────────────────────────────────────────
     app.use((req, res) => {

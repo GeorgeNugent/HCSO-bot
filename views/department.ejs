@@ -1,4 +1,4 @@
-<%- include('partials/header') %>
+﻿<%- include('partials/header') %>
 
 <style>
   :root {
@@ -6,8 +6,33 @@
     --dept-color-a13: <%= dept.color %>22;
     --dept-color-a26: <%= dept.color %>44;
   }
+  .dept-header        { border-left: 4px solid var(--dept-color); padding-left: 16px; }
+  .dept-icon-img      { width:64px;height:64px;border-radius:50%;border:3px solid var(--dept-color); }
+  .dept-icon-placeholder {
+    width:64px;height:64px;border-radius:50%;
+    background:var(--dept-color-a13);border:3px solid var(--dept-color);
+    display:flex;align-items:center;justify-content:center;font-size:28px;
+  }
+  .dept-color-display { color: var(--dept-color); }
+  .dept-color-swatch  { width:16px;height:16px;border-radius:3px;background:var(--dept-color);display:inline-block; }
+  .member-avatar      { width:32px;height:32px;border-radius:50%;vertical-align:middle;margin-right:8px; }
+  .strike-pip         { display:inline-block;width:10px;height:10px;border-radius:50%;background:#e74c3c;margin-right:2px; }
+  .strike-pip.empty   { background:var(--border); }
+  .modal-overlay      { display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal-box          { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px;min-width:340px;max-width:460px;width:100%; }
+  .modal-title        { font-size:18px;font-weight:700;color:var(--text-primary);margin-bottom:16px; }
+  .form-group         { margin-bottom:14px; }
+  .form-group label   { display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px; }
+  .member-search      { width:100%;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:14px;margin-bottom:12px; }
+  .action-btns        { display:flex;gap:6px;flex-wrap:wrap; }
+  .btn-strike  { background:#e67e22;color:#fff;border:none; }
+  .btn-kick    { background:#c0392b;color:#fff;border:none; }
+  .btn-timeout { background:#8e44ad;color:#fff;border:none; }
+  .btn-ban     { background:#2c3e50;color:#fff;border:none; }
 </style>
 
+<!-- Header -->
 <div class="page-header dept-header">
   <div style="display:flex;align-items:center;gap:16px;">
     <% if (detail.icon) { %>
@@ -18,19 +43,26 @@
     <div>
       <h2 class="page-title" style="margin:0;"><%= dept.name %></h2>
       <p class="page-subtitle" style="margin:4px 0 0;">
-        <%= dept.description || 'Department Overview' %> &nbsp;·&nbsp; ID: <code><%= guildId %></code>
+        <%= detail.name %> &nbsp;·&nbsp; <%= detail.memberCount.toLocaleString() %> members
       </p>
     </div>
   </div>
 </div>
 
-<!-- Quick Stats -->
+<!-- Stats row -->
 <div class="stats-grid" style="margin-bottom:24px;">
   <div class="stat-card">
     <div class="stat-icon">👥</div>
     <div class="stat-body">
       <div class="stat-value"><%= detail.memberCount.toLocaleString() %></div>
-      <div class="stat-label">Members</div>
+      <div class="stat-label">Total Members</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">👤</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= members.length %></div>
+      <div class="stat-label">Loaded</div>
     </div>
   </div>
   <div class="stat-card stat-card--ok">
@@ -40,84 +72,177 @@
       <div class="stat-label">Bot Status</div>
     </div>
   </div>
-  <div class="stat-card stat-card--info">
-    <div class="stat-icon">🎨</div>
+  <div class="stat-card stat-card--warn">
+    <div class="stat-icon">⚖️</div>
     <div class="stat-body">
-      <div class="stat-value dept-color-display" style="font-size:14px;" title="<%= dept.color %>"><%= dept.color %></div>
-      <div class="stat-label">Department Color</div>
+      <div class="stat-value"><%= members.reduce(function(s,m){return s+m.strikeCount},0) %></div>
+      <div class="stat-label">Total Strikes</div>
     </div>
   </div>
 </div>
 
-<!-- Department Info -->
-<div class="card" style="margin-bottom:16px;">
+<!-- Member list -->
+<div class="card">
   <div class="card-header">
-    <h3 class="card-title">🏷️ Department Details</h3>
+    <h3 class="card-title">👥 Members</h3>
   </div>
-  <div class="card-body">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      <div>
-        <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">FULL NAME</div>
-        <div style="color:var(--text-primary);font-weight:600;"><%= dept.name %></div>
-      </div>
-      <div>
-        <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">SHORT NAME</div>
-        <div style="color:var(--text-primary);font-weight:600;"><%= dept.shortName || '—' %></div>
-      </div>
-      <div>
-        <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">SERVER ID</div>
-        <div style="color:var(--text-primary);font-family:monospace;"><%= guildId %></div>
-      </div>
-      <div>
-        <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">SERVER NAME</div>
-        <div style="color:var(--text-primary);font-weight:600;"><%= detail.name %></div>
-      </div>
-      <div>
-        <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">EMBED COLOR</div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span class="dept-color-swatch"></span>
-          <span style="color:var(--text-primary);font-family:monospace;"><%= dept.color %></span>
-        </div>
-      </div>
-      <div>
-        <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">EMBED FOOTER</div>
-        <div style="color:var(--text-primary);"><%= dept.footer || '—' %></div>
-      </div>
+  <div class="card-body" style="padding-top:12px;">
+    <input type="text" id="memberSearch" class="member-search" placeholder="🔍  Search members…" oninput="filterMembers()">
+    <% if (members.length === 0) { %>
+      <p style="color:var(--text-muted);padding:12px 0;">No members loaded. Bot may not have the Members intent for this server.</p>
+    <% } else { %>
+    <div style="overflow-x:auto;">
+      <table class="table" id="memberTable">
+        <thead>
+          <tr>
+            <th>Member</th>
+            <th>Roles</th>
+            <th>Strikes</th>
+            <th>Joined</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% members.forEach(function(m) { %>
+          <tr data-name="<%= m.name.toLowerCase() %>" data-username="<%= m.username.toLowerCase() %>">
+            <td>
+              <img src="<%= m.avatar %>" alt="" class="member-avatar" onerror="this.style.display='none'">
+              <span style="font-weight:600;color:var(--text-primary);"><%= m.name %></span>
+              <% if (m.timedOut) { %><span class="badge" style="background:#8e44ad22;color:#8e44ad;margin-left:4px;">⏱ Timed out</span><% } %>
+            </td>
+            <td style="font-size:12px;color:var(--text-muted);">
+              <% m.roles.slice(0,3).forEach(function(r){ %><span class="badge" style="margin-right:3px;"><%= r %></span><% }); %>
+            </td>
+            <td>
+              <% for(var i=0;i<MAX_STRIKES;i++){ %>
+                <span class="strike-pip <%= i < m.strikeCount ? '' : 'empty' %>"></span>
+              <% } %>
+              <span style="font-size:11px;color:var(--text-muted);margin-left:4px;"><%= m.strikeCount %>/<%= MAX_STRIKES %></span>
+            </td>
+            <td style="font-size:12px;color:var(--text-muted);"><%= m.joinedAt %></td>
+            <td>
+              <div class="action-btns">
+                <button class="btn btn-sm btn-strike"  onclick="openModal('strike','<%= m.id %>','<%= m.name.replace(/'/g,&quot;&#39;&quot;) %>')">⚖️ Strike</button>
+                <button class="btn btn-sm btn-timeout" onclick="openModal('timeout','<%= m.id %>','<%= m.name.replace(/'/g,&quot;&#39;&quot;) %>')">⏱ Timeout</button>
+                <button class="btn btn-sm btn-kick"    onclick="openModal('kick','<%= m.id %>','<%= m.name.replace(/'/g,&quot;&#39;&quot;) %>')">👢 Kick</button>
+                <button class="btn btn-sm btn-ban"     onclick="openModal('ban','<%= m.id %>','<%= m.name.replace(/'/g,&quot;&#39;&quot;) %>')">🔨 Ban</button>
+              </div>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
     </div>
+    <% } %>
   </div>
-</div>
-
-<!-- Edit hint -->
-<div class="alert alert-info">
-  <strong>💡 Tip:</strong> To update this department's name, color, or footer, edit
-  <code>src/config/departments.json</code> and restart the bot. Server IDs are the JSON keys.
 </div>
 
 <div style="margin-top:16px;">
   <a href="/servers" class="btn btn-outline">← Back to All Servers</a>
 </div>
 
-<style>
-  .dept-header {
-    border-left: 4px solid var(--dept-color);
-    padding-left: 16px;
+<!-- ── Action modal ───────────────────────────────────────────────────────── -->
+<div class="modal-overlay" id="actionModal">
+  <div class="modal-box">
+    <h3 class="modal-title" id="modalTitle">Action</h3>
+    <div id="modalFields"></div>
+    <div style="display:flex;gap:10px;margin-top:18px;">
+      <button class="btn btn-primary" onclick="submitModal()" id="modalSubmitBtn">Confirm</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    </div>
+    <div id="modalResult" style="margin-top:12px;display:none;"></div>
+  </div>
+</div>
+
+<script>
+  var GUILD_ID = '<%= guildId %>';
+  var currentAction = null;
+  var currentUserId = null;
+
+  var ACTIONS = {
+    strike:  { title:'⚖️ Give Strike',   endpoint:'/api/guild/'+GUILD_ID+'/strike',   fields:['reason'] },
+    timeout: { title:'⏱ Timeout Member', endpoint:'/api/guild/'+GUILD_ID+'/timeout',  fields:['minutes','reason'] },
+    kick:    { title:'👢 Kick Member',    endpoint:'/api/guild/'+GUILD_ID+'/kick',     fields:['reason'] },
+    ban:     { title:'🔨 Ban Member',     endpoint:'/api/guild/'+GUILD_ID+'/ban',      fields:['reason'] }
+  };
+
+  function openModal(action, userId, name) {
+    currentAction = action;
+    currentUserId = userId;
+    var cfg = ACTIONS[action];
+    document.getElementById('modalTitle').textContent = cfg.title + ' — ' + name;
+    var html = '<input type="hidden" id="mUserId" value="'+userId+'">';
+    if (cfg.fields.includes('minutes')) {
+      html += '<div class="form-group"><label>Duration (minutes)</label><input class="form-control" id="mMinutes" type="number" min="1" max="40320" value="60"></div>';
+    }
+    if (cfg.fields.includes('reason')) {
+      html += '<div class="form-group"><label>Reason</label><input class="form-control" id="mReason" type="text" placeholder="Enter reason…"></div>';
+    }
+    document.getElementById('modalFields').innerHTML = html;
+    document.getElementById('modalResult').style.display = 'none';
+    document.getElementById('actionModal').classList.add('open');
   }
-  .dept-icon-img {
-    width: 64px; height: 64px; border-radius: 50%;
-    border: 3px solid var(--dept-color);
+
+  function closeModal() {
+    document.getElementById('actionModal').classList.remove('open');
   }
-  .dept-icon-placeholder {
-    width: 64px; height: 64px; border-radius: 50%;
-    background: var(--dept-color-a13);
-    border: 3px solid var(--dept-color);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 28px;
+
+  async function submitModal() {
+    var cfg = ACTIONS[currentAction];
+    var body = { userId: currentUserId };
+    var reasonEl  = document.getElementById('mReason');
+    var minutesEl = document.getElementById('mMinutes');
+    if (reasonEl)  body.reason  = reasonEl.value.trim();
+    if (minutesEl) body.minutes = minutesEl.value;
+
+    if (!body.reason && cfg.fields.includes('reason')) {
+      showModalResult('error', 'Please enter a reason.');
+      return;
+    }
+
+    var btn = document.getElementById('modalSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Working…';
+
+    try {
+      var res = await fetch(cfg.endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      var data = await res.json();
+      if (data.success) {
+        showModalResult('ok', 'Done! ' + (data.totalStrikes !== undefined ? 'Strikes: '+data.totalStrikes+'/'+<%- MAX_STRIKES %> : ''));
+        setTimeout(function(){ closeModal(); location.reload(); }, 1200);
+      } else {
+        showModalResult('error', data.error || 'Something went wrong.');
+      }
+    } catch(e) {
+      showModalResult('error', 'Request failed: ' + e.message);
+    }
+    btn.disabled = false;
+    btn.textContent = 'Confirm';
   }
-  .dept-color-display  { color: var(--dept-color); }
-  .dept-color-swatch   {
-    width: 16px; height: 16px; border-radius: 3px;
-    background: var(--dept-color); display: inline-block;
+
+  function showModalResult(type, msg) {
+    var el = document.getElementById('modalResult');
+    el.style.display = 'block';
+    el.className = type === 'ok' ? 'alert alert-success' : 'alert alert-danger';
+    el.textContent = msg;
   }
-</style>
+
+  function filterMembers() {
+    var q = document.getElementById('memberSearch').value.toLowerCase();
+    document.querySelectorAll('#memberTable tbody tr').forEach(function(row) {
+      var name = row.dataset.name || '';
+      var user = row.dataset.username || '';
+      row.style.display = (name.includes(q) || user.includes(q)) ? '' : 'none';
+    });
+  }
+
+  document.getElementById('actionModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+</script>
 
 <%- include('partials/footer') %>

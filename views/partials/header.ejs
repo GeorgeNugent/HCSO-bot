@@ -58,13 +58,13 @@
       <a href="/servers"     class="nav-link <%= page === 'servers'     ? 'active' : '' %>">
         <span class="nav-icon">🌐</span><span class="nav-label">All Servers</span>
       </a>
-      <% if (typeof departments !== 'undefined') { %>
-        <% Object.entries(departments).forEach(([gId, dept]) => { %>
-          <a href="/departments/<%= gId %>"
-             class="nav-link <%= page === 'department' && typeof guildId !== 'undefined' && guildId === gId ? 'active' : '' %>"
-             title="<%= dept.name %>">
+      <% if (typeof servers !== 'undefined' && servers.length > 0) { %>
+        <% servers.forEach(function(srv) { %>
+          <a href="/departments/<%= srv.id %>"
+             class="nav-link <%= page === 'department' && typeof guildId !== 'undefined' && guildId === srv.id ? 'active' : '' %>"
+             title="<%= srv.name %>">
             <span class="nav-icon">🏛️</span>
-            <span class="nav-label" style="font-size:12px;"><%= dept.shortName || dept.name %></span>
+            <span class="nav-label" style="font-size:12px;"><%= srv.shortName || srv.department %></span>
           </a>
         <% }); %>
       <% } %>
