@@ -76,6 +76,32 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .dept-tabs {
+    margin: 8px 0 18px;
+    padding-bottom: 0;
+    border-bottom: none;
+    gap: 8px;
+  }
+  .dept-tabs .tab-btn {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface2);
+    color: var(--text-muted);
+    font-weight: 600;
+    padding: 9px 14px;
+  }
+  .dept-tabs .tab-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--dept-color-a26);
+    background: var(--dept-color-a13);
+  }
+  .dept-tabs .tab-btn.active {
+    color: #fff;
+    border-color: transparent;
+    border-bottom: 1px solid transparent;
+    background: var(--dept-color);
+    box-shadow: 0 10px 22px var(--dept-color-a26);
+  }
 </style>
 
 <!-- Header -->
@@ -90,18 +116,7 @@
       <h2 class="page-title" style="margin:0;"><%= dept.name %></h2>
       <p class="page-subtitle" style="margin:4px 0 0;">
         <%= detail.name %> &nbsp;·&nbsp; <%= detail.memberCount.toLocaleString() %> members
-    <!-- Tab bar -->
-    <div class="tab-bar" style="margin-bottom:0;border-bottom:none;padding-bottom:0;">
-      <button class="tab-btn active" data-dtab="dtab-members">👥 Members</button>
-      <button class="tab-btn" data-dtab="dtab-cases">📋 Cases</button>
-      <button class="tab-btn" data-dtab="dtab-loa">🌴 LOA Manager</button>
-      <button class="tab-btn" data-dtab="dtab-logs">📋 View Logs</button>
-    </div>
-
-    <!-- ─── Members tab panel ─────────────────────────────────────────────── -->
-    <div id="dtab-members" class="tab-panel active">
-    <!-- Member list -->
-    <div class="card">
+      </p>
     </div>
   </div>
 </div>
@@ -138,77 +153,84 @@
   </div>
 </div>
 
-<!-- Member list -->
-<div class="card">
-  <div class="card-header">
-    <h3 class="card-title">👥 Members</h3>
-  </div>
-  <div class="card-body" style="padding-top:12px;">
-    <input type="text" id="memberSearch" class="member-search" placeholder="🔍  Search members…" oninput="filterMembers()">
-    <% if (members.length === 0) { %>
-      <p style="color:var(--text-muted);padding:12px 0;">
-        No members loaded.
-        <% if (memberLoadError) { %>
-          Error: <%= memberLoadError %>
-        <% } else { %>
-          Bot may not have access to fetch members for this server.
-        <% } %>
-      </p>
-    <% } else { %>
-    <div style="overflow-x:auto;">
-      <table class="table" id="memberTable">
-        <thead>
-          <tr>
-            <th class="col-member">Member</th>
-            <th class="col-roles">Roles</th>
-            <th class="col-strikes">Strikes</th>
-            <th class="col-joined">Joined</th>
-            <th class="col-actions">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% members.forEach(function(m) { %>
-          <tr data-name="<%= m.name.toLowerCase() %>" data-username="<%= m.username.toLowerCase() %>">
-            <td class="col-member">
-              <img src="<%= m.avatar %>" alt="" class="member-avatar" onerror="this.style.display='none'">
-              <span style="font-weight:600;color:var(--text-primary);"><%= m.name %></span>
-              <% if (m.timedOut) { %><span class="badge" style="background:#8e44ad22;color:#8e44ad;margin-left:4px;">⏱ Timed out</span><% } %>
-            </td>
-            <td class="col-roles" style="font-size:12px;color:var(--text-muted);">
-              <div class="role-cell">
-                <span class="role-pill" title="<%= m.highestRole %>"><%= m.highestRole %></span>
-              </div>
-            </td>
-            <td class="col-strikes">
-              <% for(var i=0;i<MAX_STRIKES;i++){ %>
-                <span class="strike-pip <%= i < m.strikeCount ? '' : 'empty' %>"></span>
-              <% } %>
-              <span style="font-size:11px;color:var(--text-muted);margin-left:4px;"><%= m.strikeCount %>/<%= MAX_STRIKES %></span>
-            </td>
-            <td class="col-joined" style="font-size:12px;color:var(--text-muted);"><%= m.joinedAt %></td>
-            <td class="col-actions">
-              <div class="action-btns">
-                <button class="btn btn-sm btn-strike"  data-action="strike"  data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">⚖️ Strike</button>
-                <button class="btn btn-sm btn-timeout" data-action="timeout" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">⏱ Timeout</button>
-                <button class="btn btn-sm btn-kick"    data-action="kick"    data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">👢 Kick</button>
-                <button class="btn btn-sm btn-ban"     data-action="ban"     data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">🔨 Ban</button>
-                  <button class="btn btn-sm btn-strike-remove" data-action="strike-remove" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">❌ Remove Strike</button>
-              </div>
-            </td>
-          </tr>
-          <% }); %>
-        </tbody>
-      </table>
+<!-- Tab bar -->
+<div class="tab-bar dept-tabs">
+  <button class="tab-btn active" data-dtab="dtab-members">👥 Members</button>
+  <button class="tab-btn" data-dtab="dtab-cases">📋 Cases</button>
+  <button class="tab-btn" data-dtab="dtab-loa">🌴 LOA Manager</button>
+  <button class="tab-btn" data-dtab="dtab-logs">🧾 View Logs</button>
+</div>
+
+<!-- ─── Members tab panel ─────────────────────────────────────────────── -->
+<div id="dtab-members" class="tab-panel active">
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">👥 Members</h3>
     </div>
-    <% } %>
+    <div class="card-body" style="padding-top:12px;">
+      <input type="text" id="memberSearch" class="member-search" placeholder="🔍  Search members…" oninput="filterMembers()">
+      <% if (members.length === 0) { %>
+        <p style="color:var(--text-muted);padding:12px 0;">
+          No members loaded.
+          <% if (memberLoadError) { %>
+            Error: <%= memberLoadError %>
+          <% } else { %>
+            Bot may not have access to fetch members for this server.
+          <% } %>
+        </p>
+      <% } else { %>
+      <div style="overflow-x:auto;">
+        <table class="table" id="memberTable">
+          <thead>
+            <tr>
+              <th class="col-member">Member</th>
+              <th class="col-roles">Roles</th>
+              <th class="col-strikes">Strikes</th>
+              <th class="col-joined">Joined</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% members.forEach(function(m) { %>
+            <tr data-name="<%= m.name.toLowerCase() %>" data-username="<%= m.username.toLowerCase() %>">
+              <td class="col-member">
+                <img src="<%= m.avatar %>" alt="" class="member-avatar" onerror="this.style.display='none'">
+                <span style="font-weight:600;color:var(--text-primary);"><%= m.name %></span>
+                <% if (m.timedOut) { %><span class="badge" style="background:#8e44ad22;color:#8e44ad;margin-left:4px;">⏱ Timed out</span><% } %>
+              </td>
+              <td class="col-roles" style="font-size:12px;color:var(--text-muted);">
+                <div class="role-cell">
+                  <span class="role-pill" title="<%= m.highestRole %>"><%= m.highestRole %></span>
+                </div>
+              </td>
+              <td class="col-strikes">
+                <% for(var i=0;i<MAX_STRIKES;i++){ %>
+                  <span class="strike-pip <%= i < m.strikeCount ? '' : 'empty' %>"></span>
+                <% } %>
+                <span style="font-size:11px;color:var(--text-muted);margin-left:4px;"><%= m.strikeCount %>/<%= MAX_STRIKES %></span>
+              </td>
+              <td class="col-joined" style="font-size:12px;color:var(--text-muted);"><%= m.joinedAt %></td>
+              <td class="col-actions">
+                <div class="action-btns">
+                  <button class="btn btn-sm btn-strike" data-action="strike" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">⚖️ Strike</button>
+                  <button class="btn btn-sm btn-timeout" data-action="timeout" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">⏱ Timeout</button>
+                  <button class="btn btn-sm btn-kick" data-action="kick" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">👢 Kick</button>
+                  <button class="btn btn-sm btn-ban" data-action="ban" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">🔨 Ban</button>
+                  <button class="btn btn-sm btn-strike-remove" data-action="strike-remove" data-id="<%= m.id %>" data-name="<%= m.name %>" onclick="openModal(this.dataset.action,this.dataset.id,this.dataset.name)">❌ Remove Strike</button>
+                </div>
+              </td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+    </div>
   </div>
-</div>
 
-<div style="margin-top:16px;">
-  <a href="/servers" class="btn btn-outline">← Back to All Servers</a>
-</div>
-
-<!-- ── Action modal ───────────────────────────────────────────────────────── -->
+  <div style="margin-top:16px;">
+    <a href="/servers" class="btn btn-outline">← Back to All Servers</a>
+  </div>
 </div><!-- end dtab-members -->
 
 <!-- ─── Cases tab panel ──────────────────────────────────────────────────── -->
