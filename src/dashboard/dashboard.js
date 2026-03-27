@@ -186,6 +186,7 @@ export function startDashboard(context) {
         serverStats,
         client,
         config:               context.config,
+        saveConfig:           context.saveConfig,
         strikes:              context.strikes,
         saveStrikes:          context.saveStrikes,
         getUserStrikeEntries: context.getUserStrikeEntries,

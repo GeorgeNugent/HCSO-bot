@@ -220,6 +220,7 @@
   <button class="tab-btn" data-dtab="dtab-cases">📋 Cases</button>
   <button class="tab-btn" data-dtab="dtab-loa"><%= useCommandTabNames ? '🌴 Staff Mgmt' : '🌴 LOA Manager' %></button>
   <button class="tab-btn" data-dtab="dtab-logs">🧾 View Logs</button>
+  <button class="tab-btn" data-dtab="dtab-settings">⚙️ Settings</button>
 </div>
 
 <!-- ─── Members tab panel ─────────────────────────────────────────────── -->
@@ -476,6 +477,46 @@
   </div>
 </div><!-- end dtab-logs -->
 
+<!-- ─── Settings tab panel ──────────────────────────────────────────────── -->
+<div id="dtab-settings" class="tab-panel">
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">⚙️ Department Access Settings</h3></div>
+    <div class="card-body">
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Configure who can view and manage permissions for this department on the dashboard.</p>
+      
+      <!-- Dashboard Segment Access -->
+      <div style="margin-bottom:24px;">
+        <h4 style="color:var(--text-primary);font-weight:600;margin-bottom:12px;">📊 Dashboard Segment Access</h4>
+        <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">Select which roles can view the "Departments" segment in the dashboard.</p>
+        <div id="segment-access-loading" style="color:var(--text-muted);">Loading roles…</div>
+        <div id="segment-access-container" style="display:none;margin-bottom:12px;max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:12px;"></div>
+        <button class="btn btn-primary btn-sm" onclick="saveSegmentAccess()" id="segment-save-btn" style="display:none;">Save Segment Access</button>
+        <div id="segment-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
+      </div>
+
+      <!-- Suggestion Reviewer Roles -->
+      <div style="margin-bottom:24px;">
+        <h4 style="color:var(--text-primary);font-weight:600;margin-bottom:12px;">💬 Suggestion Reviewers</h4>
+        <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">Select which roles can review suggestions for this department.</p>
+        <div id="suggestion-reviewer-loading" style="color:var(--text-muted);">Loading roles…</div>
+        <div id="suggestion-reviewer-container" style="display:none;margin-bottom:12px;max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:12px;"></div>
+        <button class="btn btn-primary btn-sm" onclick="saveSuggestionReviewers()" id="suggestion-save-btn" style="display:none;">Save Suggestion Reviewers</button>
+        <div id="suggestion-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
+      </div>
+
+      <!-- Application Reviewer Roles -->
+      <div>
+        <h4 style="color:var(--text-primary);font-weight:600;margin-bottom:12px;">📝 Application Reviewers</h4>
+        <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">Select which roles can review applications for this department.</p>
+        <div id="application-reviewer-loading" style="color:var(--text-muted);">Loading roles…</div>
+        <div id="application-reviewer-container" style="display:none;margin-bottom:12px;max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:12px;"></div>
+        <button class="btn btn-primary btn-sm" onclick="saveApplicationReviewers()" id="application-save-btn" style="display:none;">Save Application Reviewers</button>
+        <div id="application-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
+      </div>
+    </div>
+  </div>
+</div><!-- end dtab-settings -->
+
 <!-- ── Action modal ───────────────────────────────────────────────────────── -->
 <div class="modal-overlay" id="actionModal" data-max-strikes="<%= MAX_STRIKES %>">
   <div class="modal-box">
@@ -591,7 +632,7 @@
     document.querySelectorAll('.tab-btn[data-dtab]').forEach(function(btn) {
       btn.addEventListener('click', function() {
         document.querySelectorAll('.tab-btn[data-dtab]').forEach(function(b){ b.classList.remove('active'); });
-        document.querySelectorAll('#dtab-members,#dtab-cases,#dtab-loa,#dtab-logs').forEach(function(p){ p.classList.remove('active'); });
+        document.querySelectorAll('#dtab-members,#dtab-cases,#dtab-loa,#dtab-logs,#dtab-settings').forEach(function(p){ p.classList.remove('active'); });
         this.classList.add('active');
         var panel = document.getElementById(this.dataset.dtab);
         if (panel) panel.classList.add('active');
@@ -637,6 +678,132 @@
         reason:    document.getElementById('dloa-reason') ? document.getElementById('dloa-reason').value : ''
       }, 'dloa-result');
     }
+
+    // ── Settings Tab Functions ────────────────────────────────────────────────
+    var deptSettingsCache = { roles: [], segmentAccess: [], suggestionReviewers: [], applicationReviewers: [] };
+
+    async function loadDepartmentSettings() {
+      try {
+        const res = await fetch('/api/guild/' + GUILD_ID + '/settings', { method: 'GET' });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Failed to load settings');
+        
+        deptSettingsCache.roles = data.roles || [];
+        deptSettingsCache.segmentAccess = data.segmentAccess || [];
+        deptSettingsCache.suggestionReviewers = data.suggestionReviewers || [];
+        deptSettingsCache.applicationReviewers = data.applicationReviewers || [];
+        
+        renderRoleCheckboxes('segment-access-container', 'segment-access-loading', deptSettingsCache.segmentAccess, 'segment-save-btn');
+        renderRoleCheckboxes('suggestion-reviewer-container', 'suggestion-reviewer-loading', deptSettingsCache.suggestionReviewers, 'suggestion-save-btn');
+        renderRoleCheckboxes('application-reviewer-container', 'application-reviewer-loading', deptSettingsCache.applicationReviewers, 'application-save-btn');
+      } catch(e) {
+        console.error('Error loading settings:', e);
+        document.getElementById('segment-access-loading').textContent = 'Error loading settings: ' + e.message;
+      }
+    }
+
+    function renderRoleCheckboxes(containerId, loadingId, selectedIds, saveBtnId) {
+      const container = document.getElementById(containerId);
+      const loading = document.getElementById(loadingId);
+      
+      if (!deptSettingsCache.roles || deptSettingsCache.roles.length === 0) {
+        loading.textContent = 'No roles available for this server.';
+        return;
+      }
+
+      // Hide loading, show container
+      loading.style.display = 'none';
+      container.style.display = 'block';
+      document.getElementById(saveBtnId).style.display = 'inline-block';
+
+      // Clear and rebuild
+      container.innerHTML = '';
+      deptSettingsCache.roles.forEach(role => {
+        const isChecked = selectedIds.includes(role.id);
+        const label = document.createElement('label');
+        label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px;cursor:pointer;border-radius:6px;transition:background .16s;';
+        label.innerHTML = `
+          <input type="checkbox" value="${role.id}" ${isChecked ? 'checked' : ''} style="accent-color:var(--dept-color);cursor:pointer;width:16px;height:16px;">
+          <span style="color:${role.color || 'var(--text-primary)'};font-weight:500;">${role.name}</span>
+        `;
+        label.onmouseover = () => label.style.background = 'var(--surface2)';
+        label.onmouseout = () => label.style.background = 'transparent';
+        container.appendChild(label);
+      });
+    }
+
+    function getSelectedRoleIds(containerId) {
+      const container = document.getElementById(containerId);
+      const checkboxes = container.querySelectorAll('input[type="checkbox"]:checked');
+      return Array.from(checkboxes).map(cb => cb.value);
+    }
+
+    function showResult(resultId, success, message) {
+      const el = document.getElementById(resultId);
+      el.style.display = 'block';
+      el.style.color = success ? '#2ecc71' : '#e74c3c';
+      el.style.background = success ? 'rgba(46,204,113,.12)' : 'rgba(231,76,60,.12)';
+      el.style.border = '1px solid ' + (success ? '#2ecc7150' : '#e74c3c50');
+      el.textContent = message || (success ? 'Saved!' : 'Error saving');
+    }
+
+    async function saveSegmentAccess() {
+      const roleIds = getSelectedRoleIds('segment-access-container');
+      try {
+        const res = await fetch('/api/guild/' + GUILD_ID + '/settings/segment-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roleIds })
+        });
+        const data = await res.json();
+        showResult('segment-result', data.success, data.message || (data.success ? 'Segment access updated' : data.error));
+        if (data.success) deptSettingsCache.segmentAccess = roleIds;
+      } catch(e) {
+        showResult('segment-result', false, 'Request failed: ' + e.message);
+      }
+    }
+
+    async function saveSuggestionReviewers() {
+      const roleIds = getSelectedRoleIds('suggestion-reviewer-container');
+      try {
+        const res = await fetch('/api/guild/' + GUILD_ID + '/settings/suggestion-reviewers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roleIds })
+        });
+        const data = await res.json();
+        showResult('suggestion-result', data.success, data.message || (data.success ? 'Suggestion reviewers updated' : data.error));
+        if (data.success) deptSettingsCache.suggestionReviewers = roleIds;
+      } catch(e) {
+        showResult('suggestion-result', false, 'Request failed: ' + e.message);
+      }
+    }
+
+    async function saveApplicationReviewers() {
+      const roleIds = getSelectedRoleIds('application-reviewer-container');
+      try {
+        const res = await fetch('/api/guild/' + GUILD_ID + '/settings/application-reviewers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roleIds })
+        });
+        const data = await res.json();
+        showResult('application-result', data.success, data.message || (data.success ? 'Application reviewers updated' : data.error));
+        if (data.success) deptSettingsCache.applicationReviewers = roleIds;
+      } catch(e) {
+        showResult('application-result', false, 'Request failed: ' + e.message);
+      }
+    }
+
+    // Load settings when Settings tab is clicked
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        if (this.dataset.dtab === 'dtab-settings') {
+          loadDepartmentSettings();
+        }
+      });
+    });
+
 </script>
 
 <%- include('partials/footer') %>

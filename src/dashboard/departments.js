@@ -14,12 +14,13 @@ import { getAllDepartments, getBranding } from "../embeds/departmentThemes.js";
 
 /**
  * @param {{ requireStaff: Function, segmentGuard: Function, serverStats: Object, client: Object,
+ *           config: Object, saveConfig: Function,
  *           strikes: Object, saveStrikes: Function,
  *           getUserStrikeEntries: Function, syncUserStrikeRoles: Function,
- *           MAX_STRIKES: number }} deps
+ *           MAX_STRIKES: number, patrols: Object, loa: Object, casesData: Object, saveCases: Function, saveLOA: Function }} deps
  * @returns {import("express").Router}
  */
-export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats, client, config, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES, patrols, loa, casesData, saveCases, saveLOA }) {
+export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats, client, config, saveConfig, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES, patrols, loa, casesData, saveCases, saveLOA }) {
     const router = Router();
     const HCSO_GUILD_ID = "1482203107432595601";
     const STRIKE_ROLE_IDS = [
@@ -621,6 +622,108 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
             await saveLOA();
             res.json({ success: true, message: `LOA ended for <@${userId}>.` });
         } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── Department Settings: Fetch roles and current config ─────────────────────
+    router.get("/api/guild/:guildId/settings", requireStaff, async (req, res) => {
+        try {
+            const { guildId } = req.params;
+            const guild = await getGuild(guildId);
+            if (!guild) return res.status(404).json({ error: "Guild not found" });
+
+            // Check if user is guild admin or staff
+            const userId = req.session.user?.id;
+            if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+            // Fetch roles for this guild
+            const roles = (await guild.roles.fetch().catch(() => null))?.map(r => ({
+                id: r.id,
+                name: r.name,
+                color: r.hexColor || '#808080'
+            })).filter(r => r.name !== '@everyone') || [];
+
+            // Get current config for this guild
+            const segmentAccess = config.dashboardSegmentAccessByGuild?.[guildId] || [];
+            const suggestionReviewers = config.suggestionReviewerRoleIdsByGuild?.[guildId] || [];
+            const applicationReviewers = config.applicationReviewerRoleIdsByGuild?.[guildId] || [];
+
+            res.json({
+                success: true,
+                roles,
+                segmentAccess,
+                suggestionReviewers,
+                applicationReviewers
+            });
+        } catch (err) {
+            console.error("[Dept] /api/guild/:guildId/settings error:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── Department Settings: Save segment access ──────────────────────────────
+    router.post("/api/guild/:guildId/settings/segment-access", requireStaff, async (req, res) => {
+        try {
+            const { guildId } = req.params;
+            const { roleIds } = req.body;
+            if (!Array.isArray(roleIds)) return res.status(400).json({ error: "roleIds must be an array" });
+
+            const guild = await getGuild(guildId);
+            if (!guild) return res.status(404).json({ error: "Guild not found" });
+
+            // Initialize if needed
+            if (!config.dashboardSegmentAccessByGuild) config.dashboardSegmentAccessByGuild = {};
+            config.dashboardSegmentAccessByGuild[guildId] = roleIds;
+            await saveConfig();
+
+            res.json({ success: true, message: "Segment access updated" });
+        } catch (err) {
+            console.error("[Dept] /api/guild/:guildId/settings/segment-access error:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── Department Settings: Save suggestion reviewers ────────────────────────
+    router.post("/api/guild/:guildId/settings/suggestion-reviewers", requireStaff, async (req, res) => {
+        try {
+            const { guildId } = req.params;
+            const { roleIds } = req.body;
+            if (!Array.isArray(roleIds)) return res.status(400).json({ error: "roleIds must be an array" });
+
+            const guild = await getGuild(guildId);
+            if (!guild) return res.status(404).json({ error: "Guild not found" });
+
+            // Initialize if needed
+            if (!config.suggestionReviewerRoleIdsByGuild) config.suggestionReviewerRoleIdsByGuild = {};
+            config.suggestionReviewerRoleIdsByGuild[guildId] = roleIds;
+            await saveConfig();
+
+            res.json({ success: true, message: "Suggestion reviewers updated" });
+        } catch (err) {
+            console.error("[Dept] /api/guild/:guildId/settings/suggestion-reviewers error:", err.message);
+            res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── Department Settings: Save application reviewers ────────────────────────
+    router.post("/api/guild/:guildId/settings/application-reviewers", requireStaff, async (req, res) => {
+        try {
+            const { guildId } = req.params;
+            const { roleIds } = req.body;
+            if (!Array.isArray(roleIds)) return res.status(400).json({ error: "roleIds must be an array" });
+
+            const guild = await getGuild(guildId);
+            if (!guild) return res.status(404).json({ error: "Guild not found" });
+
+            // Initialize if needed
+            if (!config.applicationReviewerRoleIdsByGuild) config.applicationReviewerRoleIdsByGuild = {};
+            config.applicationReviewerRoleIdsByGuild[guildId] = roleIds;
+            await saveConfig();
+
+            res.json({ success: true, message: "Application reviewers updated" });
+        } catch (err) {
+            console.error("[Dept] /api/guild/:guildId/settings/application-reviewers error:", err.message);
             res.status(500).json({ error: err.message });
         }
     });
