@@ -334,7 +334,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         const userId = req.session.user?.id || null;
         const isBotOwner = userId === BOT_OWNER_ID;
         const departments = getAllDepartments();
-        const departmentEntries = Object.entries(departments || {}).filter(([, d]) => d && d.type === "department");
+        const departmentEntries = Object.entries(departments || {}).filter(([id, d]) => d && d.type === "department" && /^\d{17,20}$/.test(String(id)));
 
         const mainGuild = await getMainRoleGuild();
         const member = mainGuild && userId ? await mainGuild.members.fetch(userId).catch(() => null) : null;

@@ -317,6 +317,7 @@ function getDepartmentApplicationChoices() {
 
     for (const [guildId, dept] of Object.entries(departments || {})) {
         if (!dept || dept.type === "main") continue;
+        if (!/^\d{17,20}$/.test(String(guildId))) continue;
         choices.push({
             label: dept.name || dept.shortName || guildId,
             value: `dept:${guildId}`,
