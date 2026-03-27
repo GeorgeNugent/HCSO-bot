@@ -12,7 +12,7 @@
     "name": "Hendry County Sheriff's Office",
     "shortName": "HCSO",
     "color": "#4ea8de",
-    "logo": "/images/hcso.png",
+    "logo": "/images/HCSO.png",
     "footer": "HCSO — Law Enforcement Division",
     "description": "Law enforcement department"
   },
@@ -21,7 +21,7 @@
     "name": "Florida Highway Patrol",
     "shortName": "FHP",
     "color": "#f0a500",
-    "logo": "/images/fhp.png",
+    "logo": "/images/FHP.png",
     "footer": "FHP — State Patrol Division",
     "description": "State patrol department"
   },
@@ -30,7 +30,7 @@
     "name": "Clewiston Police Department",
     "shortName": "CPD",
     "color": "#ed4245",
-    "logo": "/images/cpd.png",
+    "logo": "/images/CPD.png",
     "footer": "CPD — Municipal Police Division",
     "description": "Municipal police department"
   }
