@@ -10,7 +10,7 @@
  *   POST /api/guild/:guildId/unban        — unban a member
  */
 import { Router } from "express";
-import { getAllDepartments, getBranding } from "../embeds/departmentThemes.js";
+import { getAllDepartments, getBranding, resolveDepartmentForGuild } from "../embeds/departmentThemes.js";
 
 /**
  * @param {{ requireStaff: Function, segmentGuard: Function, serverStats: Object, client: Object,
@@ -74,29 +74,34 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
         // -- Joint Operations --
     router.get("/departments/joint", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
-            const departments = getAllDepartments();
             const branding    = getBranding();
+            const departments = getAllDepartments();
+
+            const configuredDepartmentEntries = Object.entries(departments)
+                .filter(([, dept]) => dept && dept.type === "department");
 
             const deptGuilds = [];
-            for (const [guildId, guild] of client.guilds.cache) {
-                const dept = departments[guildId];
-                if (dept && dept.type === "main") continue;
+            for (const [configuredGuildId, configuredDept] of configuredDepartmentEntries) {
+                const resolvedGuildId = await resolveDashboardGuildId(String(configuredGuildId));
+                const guild = await getGuild(resolvedGuildId);
 
-                try { await guild.members.fetch(); } catch {}
+                if (guild) {
+                    try { await guild.members.fetch(); } catch {}
+                }
 
-                const strikeCount = Object.values(strikes[guildId] || {})
+                const strikeCount = Object.values(strikes[resolvedGuildId] || strikes[configuredGuildId] || {})
                     .reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0);
 
                 deptGuilds.push({
-                    id:          guildId,
-                    name:        guild.name,
-                    shortName:   dept ? dept.shortName : branding.fallback.shortName,
-                    icon:        guild.iconURL({ size: 64 }) ?? null,
-                    logo:        dept?.logo ?? null,
-                    color:       dept ? (dept.color || branding.defaultColor) : branding.defaultColor,
-                    memberCount: guild.memberCount,
+                    id:          String(configuredGuildId),
+                    name:        configuredDept.name,
+                    shortName:   configuredDept.shortName || branding.fallback.shortName,
+                    icon:        guild?.iconURL({ size: 64 }) ?? null,
+                    logo:        configuredDept.logo ?? null,
+                    color:       configuredDept.color || branding.defaultColor,
+                    memberCount: guild?.memberCount || 0,
                     strikeCount,
-                    online:      true
+                    online:      !!guild
                 });
             }
 
@@ -135,11 +140,11 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     // ── Per-department member management page ─────────────────────────────────
     router.get("/departments/:guildId", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
-            const { guildId } = req.params;
-            const departments = getAllDepartments();
+            const requestedGuildId = String(req.params.guildId || "");
+            const guildId = await resolveDashboardGuildId(requestedGuildId);
             const branding    = getBranding();
-            const dept        = departments[guildId] ?? null;
             const detail      = await serverStats.getServerDetail(guildId);
+            const dept        = resolveDepartmentForGuild({ id: guildId, name: detail?.name || "" }) ?? null;
 
             if (!detail) {
                 return res.render("error", {
@@ -221,9 +226,10 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
                     return { id: uid, name: m?.name || uid, startDate: d.startDate, endDate: d.endDate };
                 });
 
-            const isHcsoDepartment = String(guildId) === HCSO_GUILD_ID || String(dept?.shortName || "").toUpperCase() === "HCSO";
+            const isLawEnforcementDepartment = ["HCSO", "CPD", "FHP"].includes(String(dept?.shortName || "").toUpperCase())
+                || ["1482203107432595601", "1487191580279443539", "1487191833204228187"].includes(String(guildId));
             let canManageEndLoa = true;
-            if (isHcsoDepartment) {
+            if (isLawEnforcementDepartment) {
                 const requesterId = req.session.user?.id || null;
                 const requesterMember = requesterId && guild ? await guild.members.fetch(requesterId).catch(() => null) : null;
                 canManageEndLoa = isSupervisorPlus(requesterMember);
@@ -255,7 +261,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
                 deptOpenCases,
                 usersOnLoa,
                 deptStrikeLogs,
-                isHcsoDepartment,
+                isHcsoDepartment: isLawEnforcementDepartment,
                 canManageEndLoa
             });
         } catch (err) {
@@ -268,6 +274,26 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     async function getGuild(guildId) {
         return client.guilds.cache.get(guildId)
             ?? await client.guilds.fetch(guildId).catch(() => null);
+    }
+
+    async function resolveDashboardGuildId(requestedGuildId) {
+        const directGuild = await getGuild(requestedGuildId);
+        if (directGuild) return requestedGuildId;
+
+        const requestedDept = resolveDepartmentForGuild({ id: requestedGuildId, name: "" });
+        const requestedShortName = String(requestedDept?.shortName || "").toUpperCase();
+        if (!requestedShortName) return requestedGuildId;
+
+        const guildRefs = await client.guilds.fetch().catch(() => client.guilds.cache);
+        for (const [, guildRef] of guildRefs) {
+            const mappedDept = resolveDepartmentForGuild({ id: guildRef.id, name: guildRef.name });
+            const mappedShortName = String(mappedDept?.shortName || "").toUpperCase();
+            if (mappedShortName === requestedShortName) {
+                return String(guildRef.id);
+            }
+        }
+
+        return requestedGuildId;
     }
 
     // ── API: Strike ───────────────────────────────────────────────────────────
@@ -606,8 +632,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
             const guild = await getGuild(guildId);
             if (!guild) return res.status(404).json({ error: "Guild not found" });
 
-            const departments = getAllDepartments();
-            const dept = departments[guildId];
+            const dept = resolveDepartmentForGuild({ id: guildId, name: guild.name }) ?? null;
             const shortName = String(dept?.shortName || "").toUpperCase();
             const isLawEnforcement = ["HCSO", "CPD", "FHP"].includes(shortName);
 

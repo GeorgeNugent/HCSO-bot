@@ -1,11 +1,4 @@
 import "dotenv/config";
-import { execSync } from "child_process";
-try {
-    execSync("git fetch origin && git checkout origin/main -- views/ src/ index.js dashboard.js", { stdio: "pipe" });
-    console.log("[Startup] Synced code files from GitHub.");
-} catch (e) {
-    console.warn("[Startup] Git sync skipped:", e.message);
-}
 import { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ActivityType, ChannelType, AuditLogEvent, StringSelectMenuBuilder } from "discord.js";
 import fs from "fs";
 import path from "node:path";
@@ -17,6 +10,7 @@ import { getAllDepartments } from "./src/embeds/departmentThemes.js";
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 const PORT = Number(process.env.PORT) || 10000;
 
 if (!TOKEN || !CLIENT_ID) {
@@ -1758,7 +1752,9 @@ try {
     const quickGuildIds = Array.from(new Set([
         GUILD_ID,
         "1482203107432595601", // HCSO
-        "1300239835293814925"  // Main server (temporary test)
+        "1487191580279443539", // CPD
+        "1487191833204228187", // FHP
+        "1300239835293814925"  // Main server
     ].filter(Boolean)));
 
     if (quickGuildIds.length === 0) {

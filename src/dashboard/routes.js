@@ -1452,6 +1452,18 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
 
             config.dashboardSegmentAccessByGuild[serverId] = normalized;
 
+            // Keep the three law-enforcement department dashboards in sync.
+            const linkedDepartmentServerIds = [
+                "1482203107432595601", // HCSO
+                "1487191580279443539", // CPD
+                "1487191833204228187"  // FHP
+            ];
+            if (linkedDepartmentServerIds.includes(serverId)) {
+                for (const linkedServerId of linkedDepartmentServerIds) {
+                    config.dashboardSegmentAccessByGuild[linkedServerId] = normalized;
+                }
+            }
+
             // Keep legacy global setting aligned with the main role source guild.
             if (serverId === ROLE_SOURCE_GUILD_ID || !config.dashboardSegmentAccess) {
                 config.dashboardSegmentAccess = normalized;

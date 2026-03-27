@@ -144,11 +144,26 @@ export function startDashboard(context) {
     // ── res.locals available in every view ────────────────────────────────────
     app.use(async (req, res, next) => {
         const branding     = getBranding();
-        const departments  = getAllDepartments();
+        const configuredDepartments = getAllDepartments();
         const servers      = await serverStats.getAllServers().catch(() => []);
+        const departments  = { ...configuredDepartments };
         const userId       = req.session.user?.id || null;
         const roleIds      = userId ? await getViewerRoleIds(userId, GUILD_ID || MAIN_ROLE_GUILD_ID) : [];
         const segmentAccess = {};
+
+        for (const srv of servers) {
+            if (departments[srv.id]) continue;
+            if (srv.departmentType !== "department") continue;
+            departments[srv.id] = {
+                type: "department",
+                name: srv.department,
+                shortName: srv.shortName,
+                color: srv.color,
+                logo: srv.logo,
+                footer: srv.footer,
+                description: ""
+            };
+        }
 
         for (const segment of DASHBOARD_SEGMENTS) {
             segmentAccess[segment] = userId ? canAccessSegment(userId, roleIds, segment, GUILD_ID || MAIN_ROLE_GUILD_ID) : false;
