@@ -1,4 +1,11 @@
 import "dotenv/config";
+import { execSync } from "child_process";
+try {
+    execSync("git fetch origin && git checkout origin/main -- views/ src/ index.js dashboard.js", { stdio: "pipe" });
+    console.log("[Startup] Synced code files from GitHub.");
+} catch (e) {
+    console.warn("[Startup] Git sync skipped:", e.message);
+}
 import { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ActivityType, ChannelType, AuditLogEvent } from "discord.js";
 import fs from "fs";
 import path from "node:path";
