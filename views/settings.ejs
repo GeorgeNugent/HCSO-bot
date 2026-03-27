@@ -103,27 +103,59 @@
     <div class="alert alert-danger">Only Bot Owner can edit this section. You are not logged in as the owner account yet.</div>
   <% } %>
 
-  <table class="log-table" style="margin-top:10px;">
-    <thead><tr><th>Segment</th><th>Allowed Roles</th></tr></thead>
-    <tbody>
-      <% segmentKeys.forEach(seg => { %>
-      <tr>
-        <td><strong><%= seg %></strong></td>
-        <td>
-          <select class="segment-role-select" data-segment="<%= seg %>" multiple <%= isBotOwner ? '' : 'disabled' %> style="min-width:280px;min-height:110px;">
-            <% availableRoles.forEach(role => { %>
-              <% const selected = (cfg.dashboardSegmentAccess?.[seg] || []).includes(role.id); %>
-              <option value="<%= role.id %>" <%= selected ? 'selected' : '' %>><%= role.name %> (<%= role.id %>)</option>
+  <style>
+    .segment-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; margin-top: 16px; }
+    .segment-access-card { background: var(--bg-primary, #0f0f1a); border: 1px solid var(--border, #2a2a3a); border-radius: 8px; padding: 14px; }
+    .segment-access-hdr { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border, #2a2a3a); }
+    .seg-icon { font-size: 20px; line-height: 1; }
+    .seg-name { font-weight: 700; font-size: 13px; color: var(--text-primary, #fff); text-transform: capitalize; }
+    .seg-sub  { font-size: 11px; color: var(--text-muted, #666); margin-top: 2px; }
+    .role-picker { display: flex; flex-wrap: wrap; gap: 5px; min-height: 28px; }
+    .role-chip { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 20px; font-size: 11px; border: 1px solid var(--border, #333); background: transparent; color: var(--text-muted, #888); transition: all 0.12s; }
+    .role-chip input { display: none; }
+    .role-chip.clickable { cursor: pointer; }
+    .role-chip.clickable:hover { border-color: var(--accent, #F8B637); color: var(--text-primary, #fff); }
+    .role-chip.role-chip--on { background: rgba(248,182,55,0.12); border-color: var(--accent, #F8B637); color: var(--accent, #F8B637); }
+  </style>
+
+  <div class="segment-cards-grid">
+    <% var segMeta = {
+      home:        { icon: '🏠', desc: 'Main overview & quick actions' },
+      status:      { icon: '📊', desc: 'Bot uptime & performance' },
+      commands:    { icon: '⚡', desc: 'Strikes, bans & moderation' },
+      logs:        { icon: '📋', desc: 'Audit logs & history' },
+      settings:    { icon: '⚙️', desc: 'Bot configuration' },
+      departments: { icon: '🏛️', desc: 'Department & server management' }
+    }; %>
+    <% segmentKeys.forEach(function(seg) { %>
+      <% var meta = segMeta[seg] || { icon: '🔹', desc: 'Dashboard segment' }; %>
+      <div class="segment-access-card">
+        <div class="segment-access-hdr">
+          <span class="seg-icon"><%= meta.icon %></span>
+          <div>
+            <div class="seg-name"><%= seg %></div>
+            <div class="seg-sub"><%= meta.desc %></div>
+          </div>
+        </div>
+        <div class="role-picker" data-segment="<%= seg %>">
+          <% if (!availableRoles || availableRoles.length === 0) { %>
+            <span style="font-size:11px;color:var(--text-muted);">No roles found in role source server.</span>
+          <% } else { %>
+            <% availableRoles.forEach(function(role) { %>
+              <% var isSelected = cfg.dashboardSegmentAccess && cfg.dashboardSegmentAccess[seg] && cfg.dashboardSegmentAccess[seg].includes(role.id); %>
+              <label class="role-chip <%= isSelected ? 'role-chip--on' : '' %> <%= isBotOwner ? 'clickable' : '' %>">
+                <input type="checkbox" value="<%= role.id %>" <%= isSelected ? 'checked' : '' %> <%= !isBotOwner ? 'disabled' : '' %>>
+                <%= role.name %>
+              </label>
             <% }); %>
-          </select>
-        </td>
-      </tr>
-      <% }); %>
-    </tbody>
-  </table>
+          <% } %>
+        </div>
+      </div>
+    <% }); %>
+  </div>
 
   <% if (isBotOwner) { %>
-    <button type="button" class="btn btn-info" onclick="saveSegmentAccess()" style="margin-top:12px;">Save Segment Access</button>
+    <button type="button" class="btn btn-info" onclick="saveSegmentAccess()" style="margin-top:16px;">💾 Save Segment Access</button>
     <div id="segment-access-result" class="inline-result" style="display:none;margin-top:8px;"></div>
   <% } %>
 </div>
@@ -165,9 +197,9 @@ async function saveSegmentAccess() {
   resultEl.textContent = "Saving...";
 
   var segmentAccess = {};
-  document.querySelectorAll(".segment-role-select").forEach(function(selectEl) {
-    var seg = selectEl.dataset.segment;
-    var selected = Array.from(selectEl.selectedOptions).map(function(opt) { return opt.value; });
+  document.querySelectorAll(".role-picker[data-segment]").forEach(function(picker) {
+    var seg = picker.dataset.segment;
+    var selected = Array.from(picker.querySelectorAll("input[type=checkbox]:checked")).map(function(i) { return i.value; });
     segmentAccess[seg] = selected;
   });
 
@@ -190,6 +222,17 @@ async function saveSegmentAccess() {
     resultEl.classList.add("result-error");
   }
 }
+
+// Role chip click toggle
+document.querySelectorAll(".role-chip.clickable").forEach(function(chip) {
+  chip.addEventListener("click", function(e) {
+    e.preventDefault();
+    var input = chip.querySelector("input");
+    if (!input || input.disabled) return;
+    input.checked = !input.checked;
+    chip.classList.toggle("role-chip--on", input.checked);
+  });
+});
 </script>
 
 <%- include('partials/footer') %>

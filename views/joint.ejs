@@ -1,0 +1,131 @@
+<%- include('partials/header') %>
+
+<style>
+  .dept-breakdown-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .dept-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color 0.2s;
+  }
+  .dept-card:hover { border-color: var(--accent); }
+  .dept-card-header { display: flex; align-items: center; gap: 12px; }
+  .dept-card-icon {
+    width: 44px; height: 44px; border-radius: 50%; object-fit: cover;
+    flex-shrink: 0;
+  }
+  .dept-card-icon-fallback {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--accent); display: flex; align-items: center;
+    justify-content: center; font-size: 18px; flex-shrink: 0;
+  }
+  .dept-card-name { font-weight: 700; font-size: 15px; color: var(--text-primary); }
+  .dept-card-sub  { font-size: 11px; color: var(--text-muted); }
+  .dept-card-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .dept-cs { background: var(--bg-primary); border-radius: 6px; padding: 8px 12px; }
+  .dept-cs-value { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+  .dept-cs-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 1px; }
+</style>
+
+<div class="page-header">
+  <h2 class="page-title">🤝 Joint Operations</h2>
+  <p class="page-subtitle">Combined overview across all law enforcement departments</p>
+</div>
+
+<!-- Totals -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon">🏛️</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= deptGuilds.length %></div>
+      <div class="stat-label">Departments</div>
+    </div>
+  </div>
+  <div class="stat-card stat-card--info">
+    <div class="stat-icon">👥</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= totalMembers.toLocaleString() %></div>
+      <div class="stat-label">Total Members</div>
+    </div>
+  </div>
+  <div class="stat-card stat-card--warn">
+    <div class="stat-icon">⚖️</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= totalStrikes %></div>
+      <div class="stat-label">Total Strikes</div>
+    </div>
+  </div>
+  <div class="stat-card stat-card--info">
+    <div class="stat-icon">🚔</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= totalPatrols %></div>
+      <div class="stat-label">Active Patrols</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🌴</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= totalLOAs %></div>
+      <div class="stat-label">Active LOAs</div>
+    </div>
+  </div>
+  <div class="stat-card stat-card--ok">
+    <div class="stat-icon">📁</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= openCases %></div>
+      <div class="stat-label">Open Cases</div>
+    </div>
+  </div>
+</div>
+
+<!-- Per-department breakdown -->
+<div class="section-card" style="margin-top:24px;">
+  <h3 class="section-title">Department Breakdown</h3>
+  <p class="section-desc">Click a department card to manage its members.</p>
+
+  <% if (deptGuilds.length === 0) { %>
+    <p class="empty-state" style="padding:16px 0;">No department servers found. Invite the bot to HCSO, FHP and CPD servers to see them here.</p>
+  <% } else { %>
+    <div class="dept-breakdown-grid">
+      <% deptGuilds.forEach(function(dept) { %>
+      <div class="dept-card" style="border-top: 3px solid <%= dept.color %>;">
+        <div class="dept-card-header">
+          <% if (dept.icon) { %>
+            <img src="<%= dept.icon %>" alt="" class="dept-card-icon" onerror="this.style.display='none'">
+          <% } else { %>
+            <div class="dept-card-icon-fallback">🏛️</div>
+          <% } %>
+          <div>
+            <div class="dept-card-name"><%= dept.shortName %></div>
+            <div class="dept-card-sub"><%= dept.name %></div>
+          </div>
+        </div>
+        <div class="dept-card-stats">
+          <div class="dept-cs">
+            <div class="dept-cs-value" style="color:<%= dept.color %>;"><%= dept.memberCount.toLocaleString() %></div>
+            <div class="dept-cs-label">Members</div>
+          </div>
+          <div class="dept-cs">
+            <div class="dept-cs-value"><%= dept.strikeCount %></div>
+            <div class="dept-cs-label">Strikes</div>
+          </div>
+        </div>
+        <a href="/departments/<%= dept.id %>" class="btn btn-sm btn-outline" style="text-align:center;">
+          View Department →
+        </a>
+      </div>
+      <% }); %>
+    </div>
+  <% } %>
+</div>
+
+<%- include('partials/footer') %>

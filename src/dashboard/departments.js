@@ -19,7 +19,7 @@ import { getAllDepartments, getBranding } from "../embeds/departmentThemes.js";
  *           MAX_STRIKES: number }} deps
  * @returns {import("express").Router}
  */
-export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats, client, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES }) {
+export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats, client, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES, patrols, loa, casesData }) {
     const router = Router();
 
     // â”€â”€ All servers / departments overview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

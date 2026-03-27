@@ -170,7 +170,10 @@ export function startDashboard(context) {
         saveStrikes:          context.saveStrikes,
         getUserStrikeEntries: context.getUserStrikeEntries,
         syncUserStrikeRoles:  context.syncUserStrikeRoles,
-        MAX_STRIKES:          context.MAX_STRIKES
+        MAX_STRIKES:          context.MAX_STRIKES,
+        patrols:              context.patrols,
+        loa:                  context.loa,
+        casesData:            context.casesData
     }));
 
     // ── 404 fallback ─────────────────────────────────────────────────────────
