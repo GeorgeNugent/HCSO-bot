@@ -1,0 +1,30 @@
+{
+  "1300239835293814925": {
+    "name": "Twin Palms Roleplay",
+    "shortName": "TPRP",
+    "color": "#F8B637",
+    "footer": "Twin Palms Roleplay — Main Server",
+    "description": "Main roleplay community server"
+  },
+  "HCSO_SERVER_ID": {
+    "name": "Hendry County Sheriff's Office",
+    "shortName": "HCSO",
+    "color": "#F8B637",
+    "footer": "HCSO — Law Enforcement Division",
+    "description": "Law enforcement department"
+  },
+  "FHP_SERVER_ID": {
+    "name": "Florida Highway Patrol",
+    "shortName": "FHP",
+    "color": "#F8B637",
+    "footer": "FHP — State Patrol Division",
+    "description": "State patrol department"
+  },
+  "CPD_SERVER_ID": {
+    "name": "Clewiston Police Department",
+    "shortName": "CPD",
+    "color": "#F8B637",
+    "footer": "CPD — Municipal Police Division",
+    "description": "Municipal police department"
+  }
+}

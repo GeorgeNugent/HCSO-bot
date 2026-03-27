@@ -1,0 +1,13 @@
+{
+  "communityName": "Twin Palms Roleplay",
+  "botName": "Twin Palms Roleplay — Main Server Bot",
+  "dashboardTitle": "Twin Palms Roleplay — Control Panel",
+  "dashboardSubtitle": "Staff Command Panel",
+  "defaultColor": "#F8B637",
+  "fallback": {
+    "name": "Twin Palms Network",
+    "shortName": "TP",
+    "color": "#F8B637",
+    "footer": "Twin Palms Roleplay Network"
+  }
+}

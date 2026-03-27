@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Error — <%= typeof branding !== 'undefined' ? branding.dashboardTitle : 'Twin Palms Roleplay' %></title>
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body class="login-body">
+
+<div class="login-card" style="max-width:480px;">
+  <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+  <h1 class="login-title">Something went wrong</h1>
+  <p class="login-subtitle" style="color:var(--text-muted);margin:8px 0 24px;">
+    <%= message || 'An unexpected error occurred.' %>
+  </p>
+  <a href="/" class="btn btn-primary">← Go Home</a>
+  <p style="margin-top:16px;font-size:12px;color:var(--text-muted);">
+    <%= typeof branding !== 'undefined' ? branding.dashboardTitle : 'Twin Palms Roleplay — Control Panel' %>
+  </p>
+</div>
+
+</body>
+</html>

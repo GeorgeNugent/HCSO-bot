@@ -5,6 +5,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { createTicketSystem, ticketCommands } from "./ticket-system.js";
 import { startDashboard } from "./dashboard.js";
+import { createDepartmentEmbed, getDepartmentName } from "./src/embeds/embedHandler.js";
 
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
@@ -1315,7 +1316,7 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("dashboard")
-        .setDescription("Open the HCSO Department control dashboard (Admin only)")
+        .setDescription("Open the Twin Palms Roleplay Control Panel (staff only)")
 
 ].map(c => c.toJSON());
 
@@ -5118,23 +5119,37 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             // Check if user has access to dashboard
             if (!canAccessDashboard(interaction.member)) {
                 const errorEmbed = new EmbedBuilder()
-                    .setColor("#8b0000")
+                    .setColor(0x8b0000)
                     .setTitle("❌ Access Denied")
                     .setDescription("Only Administrators, Supervisors, IA, or Sheriff can access the dashboard.")
                     .setTimestamp();
                 return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
             }
 
-            // Create main dashboard embed
-            const dashboardEmbed = new EmbedBuilder()
-                .setColor("#2d5a3d")
-                .setTitle("🏢 HCSO Department Dashboard")
-                .setDescription("Select a module below to manage patrol, cases, IA, tickets, logs, and more.")
-                .setThumbnail(interaction.client.user.displayAvatarURL({ size: 128 }))
-                .setTimestamp();
+            // Department-branded embed (color and name from departments.json)
+            const deptName = getDepartmentName(interaction.guildId);
+            const dashboardEmbed = createDepartmentEmbed(interaction.guildId, {
+                title:       `🏢 ${deptName} Control Panel`,
+                description: "Select a module below to manage patrol, cases, IA, tickets, logs, and more.\n\nYou can also open the **web dashboard** for advanced tools.",
+                thumbnail:   interaction.client.user.displayAvatarURL({ size: 128 }),
+                timestamp:   true
+            });
 
-            // Build button rows showing only modules this user can access
+            // Build in-Discord module buttons (existing functionality preserved)
             const dashboardRows = buildDashboardComponents(interaction.member);
+
+            // Add web dashboard link button if DASHBOARD_URL is configured
+            const webUrl = process.env.DASHBOARD_URL;
+            if (webUrl) {
+                const webRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setLabel("🌐 Open Web Dashboard")
+                        .setStyle(ButtonStyle.Link)
+                        .setURL(webUrl)
+                );
+                dashboardRows.push(webRow);
+            }
+
             if (dashboardRows.length === 0) {
                 return interaction.reply({
                     content: "❌ You don't have access to any dashboard modules.",
@@ -5143,9 +5158,9 @@ const patrolLogChannel = client.channels.cache.get(config.logChannels.patrol);
             }
 
             return interaction.reply({
-                embeds: [dashboardEmbed],
+                embeds:     [dashboardEmbed],
                 components: dashboardRows,
-                flags: MessageFlags.Ephemeral
+                flags:      MessageFlags.Ephemeral
             });
         } catch (error) {
             console.error("Dashboard command error:", error);

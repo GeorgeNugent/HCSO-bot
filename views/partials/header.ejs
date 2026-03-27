@@ -3,8 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><%= typeof pageTitle !== 'undefined' ? pageTitle : botName %> — Dashboard</title>
+  <title><%= typeof pageTitle !== 'undefined' ? pageTitle : (typeof branding !== 'undefined' ? branding.dashboardTitle : 'Twin Palms Roleplay — Control Panel') %></title>
   <link rel="stylesheet" href="/css/dashboard.css">
+  <style>
+    :root { --accent: #F8B637; --accent-dark: #d9982b; }
+    .topbar-brand { gap: 10px; }
+    .tp-logo { font-size: 20px; font-weight: 800; color: #F8B637; letter-spacing: 0.02em; }
+    .sidebar-section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); padding: 12px 16px 4px; }
+  </style>
 </head>
 <body>
 
@@ -14,8 +20,8 @@
     <% if (botAvatar) { %>
       <img src="<%= botAvatar %>" alt="" class="topbar-avatar" onerror="this.style.display='none'">
     <% } %>
-    <span class="topbar-title"><%= botName %></span>
-    <span class="topbar-badge">Dashboard</span>
+    <span class="tp-logo">🌴 Twin Palms Roleplay</span>
+    <span class="topbar-badge">Control Panel</span>
   </div>
   <div class="topbar-user">
     <% if (user) { %>
@@ -31,24 +37,40 @@
   <!-- Sidebar -->
   <aside class="sidebar">
     <nav class="sidebar-nav">
-      <a href="/"         class="nav-link <%= page === 'home'     ? 'active' : '' %>">
+      <div class="sidebar-section-label">Main</div>
+      <a href="/"         class="nav-link <%= page === 'home'       ? 'active' : '' %>">
         <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
       </a>
-      <a href="/status"   class="nav-link <%= page === 'status'   ? 'active' : '' %>">
+      <a href="/status"   class="nav-link <%= page === 'status'     ? 'active' : '' %>">
         <span class="nav-icon">📊</span><span class="nav-label">Bot Status</span>
       </a>
-      <a href="/commands" class="nav-link <%= page === 'commands' ? 'active' : '' %>">
+      <a href="/commands" class="nav-link <%= page === 'commands'   ? 'active' : '' %>">
         <span class="nav-icon">⚡</span><span class="nav-label">Commands</span>
       </a>
-      <a href="/logs"     class="nav-link <%= page === 'logs'     ? 'active' : '' %>">
+      <a href="/logs"     class="nav-link <%= page === 'logs'       ? 'active' : '' %>">
         <span class="nav-icon">📋</span><span class="nav-label">Logs</span>
       </a>
-      <a href="/settings" class="nav-link <%= page === 'settings' ? 'active' : '' %>">
+      <a href="/settings" class="nav-link <%= page === 'settings'   ? 'active' : '' %>">
         <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
       </a>
+
+      <div class="sidebar-section-label" style="margin-top:8px;">Departments</div>
+      <a href="/servers"     class="nav-link <%= page === 'servers'     ? 'active' : '' %>">
+        <span class="nav-icon">🌐</span><span class="nav-label">All Servers</span>
+      </a>
+      <% if (typeof departments !== 'undefined') { %>
+        <% Object.entries(departments).forEach(([gId, dept]) => { %>
+          <a href="/departments/<%= gId %>"
+             class="nav-link <%= page === 'department' && typeof guildId !== 'undefined' && guildId === gId ? 'active' : '' %>"
+             title="<%= dept.name %>">
+            <span class="nav-icon">🏛️</span>
+            <span class="nav-label" style="font-size:12px;"><%= dept.shortName || dept.name %></span>
+          </a>
+        <% }); %>
+      <% } %>
     </nav>
     <div class="sidebar-footer">
-      <span class="sidebar-footer-text">HCSO Staff Panel</span>
+      <span class="sidebar-footer-text">Twin Palms Roleplay</span>
     </div>
   </aside>
 

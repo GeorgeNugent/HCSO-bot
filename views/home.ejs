@@ -82,6 +82,21 @@
   </div>
 </div>
 
+<!-- Department quick links -->
+<% if (typeof departments !== 'undefined' && Object.keys(departments).length > 0) { %>
+<div class="section-card" style="margin-top:16px;">
+  <h3 class="section-title">🏛️ Departments</h3>
+  <div class="quick-grid">
+    <a href="/servers" class="quick-btn">🌐 All Servers</a>
+    <% Object.entries(departments).forEach(([gId, dept]) => { %>
+      <a href="/departments/<%= gId %>" class="quick-btn" style="border-color:<%= dept.color %>44;">
+        <%= dept.shortName || dept.name %>
+      </a>
+    <% }); %>
+  </div>
+</div>
+<% } %>
+
 <!-- Open tickets summary -->
 <% if (openTickets > 0) { %>
 <div class="alert alert-info" style="margin-top:16px;">

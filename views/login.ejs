@@ -3,8 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><%= botName %> — Login</title>
+  <title>Twin Palms Roleplay — Control Panel</title>
   <link rel="stylesheet" href="/css/dashboard.css">
+  <style>
+    :root { --accent: #F8B637; --accent-dark: #d9982b; }
+  </style>
 </head>
 <body class="login-body">
 
@@ -12,11 +15,11 @@
   <% if (botAvatar) { %>
     <img src="<%= botAvatar %>" alt="Bot avatar" class="login-avatar" onerror="this.style.display='none'">
   <% } else { %>
-    <div class="login-avatar-placeholder">🤖</div>
+    <div class="login-avatar-placeholder">🌴</div>
   <% } %>
 
-  <h1 class="login-title"><%= botName %></h1>
-  <p class="login-subtitle">Staff Dashboard</p>
+  <h1 class="login-title" style="color:#F8B637;">Twin Palms Roleplay</h1>
+  <p class="login-subtitle">Staff Control Panel</p>
 
   <% if (error) { %>
     <div class="alert alert-danger">

@@ -1,0 +1,92 @@
+<%- include('partials/header') %>
+
+<div class="page-header" style="border-left: 4px solid <%= dept.color %>; padding-left: 16px;">
+  <div style="display:flex;align-items:center;gap:16px;">
+    <% if (detail.icon) { %>
+      <img src="<%= detail.icon %>" alt="" style="width:64px;height:64px;border-radius:50%;border:3px solid <%= dept.color %>;" onerror="this.style.display='none'">
+    <% } else { %>
+      <div style="width:64px;height:64px;border-radius:50%;background:<%= dept.color %>22;border:3px solid <%= dept.color %>;display:flex;align-items:center;justify-content:center;font-size:28px;">🏛️</div>
+    <% } %>
+    <div>
+      <h2 class="page-title" style="margin:0;"><%= dept.name %></h2>
+      <p class="page-subtitle" style="margin:4px 0 0;">
+        <%= dept.description || 'Department Overview' %> &nbsp;·&nbsp; ID: <code><%= guildId %></code>
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Stats -->
+<div class="stats-grid" style="margin-bottom:24px;">
+  <div class="stat-card">
+    <div class="stat-icon">👥</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= detail.memberCount.toLocaleString() %></div>
+      <div class="stat-label">Members</div>
+    </div>
+  </div>
+  <div class="stat-card stat-card--ok">
+    <div class="stat-icon">🟢</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= detail.online ? 'Online' : 'Offline' %></div>
+      <div class="stat-label">Bot Status</div>
+    </div>
+  </div>
+  <div class="stat-card stat-card--info">
+    <div class="stat-icon">🎨</div>
+    <div class="stat-body">
+      <div class="stat-value" style="color:<%= dept.color %>;font-size:14px;" title="<%= dept.color %>"><%= dept.color %></div>
+      <div class="stat-label">Department Color</div>
+    </div>
+  </div>
+</div>
+
+<!-- Department Info -->
+<div class="card" style="margin-bottom:16px;">
+  <div class="card-header">
+    <h3 class="card-title">🏷️ Department Details</h3>
+  </div>
+  <div class="card-body">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">FULL NAME</div>
+        <div style="color:var(--text-primary);font-weight:600;"><%= dept.name %></div>
+      </div>
+      <div>
+        <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">SHORT NAME</div>
+        <div style="color:var(--text-primary);font-weight:600;"><%= dept.shortName || '—' %></div>
+      </div>
+      <div>
+        <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">SERVER ID</div>
+        <div style="color:var(--text-primary);font-family:monospace;"><%= guildId %></div>
+      </div>
+      <div>
+        <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">SERVER NAME</div>
+        <div style="color:var(--text-primary);font-weight:600;"><%= detail.name %></div>
+      </div>
+      <div>
+        <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">EMBED COLOR</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="width:16px;height:16px;border-radius:3px;background:<%= dept.color %>;display:inline-block;"></span>
+          <span style="color:var(--text-primary);font-family:monospace;"><%= dept.color %></span>
+        </div>
+      </div>
+      <div>
+        <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px;">EMBED FOOTER</div>
+        <div style="color:var(--text-primary);"><%= dept.footer || '—' %></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit hint -->
+<div class="alert alert-info">
+  <strong>💡 Tip:</strong> To update this department's name, color, or footer, edit
+  <code>src/config/departments.json</code> and restart the bot. Server IDs are the JSON keys.
+</div>
+
+<div style="margin-top:16px;">
+  <a href="/servers" class="btn btn-outline">← Back to All Servers</a>
+</div>
+
+<%- include('partials/footer') %>

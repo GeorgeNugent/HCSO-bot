@@ -1,0 +1,93 @@
+<%- include('partials/header') %>
+
+<div class="page-header">
+  <h2 class="page-title">🌐 All Servers</h2>
+  <p class="page-subtitle">
+    <%= servers.length %> server<%= servers.length !== 1 ? 's' : '' %> &nbsp;·&nbsp;
+    <%= totalMembers.toLocaleString() %> total members
+  </p>
+</div>
+
+<div class="stats-grid" style="margin-bottom:24px;">
+  <div class="stat-card">
+    <div class="stat-icon">🏘️</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= servers.length %></div>
+      <div class="stat-label">Servers</div>
+    </div>
+  </div>
+  <div class="stat-card stat-card--info">
+    <div class="stat-icon">👥</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= totalMembers.toLocaleString() %></div>
+      <div class="stat-label">Total Members</div>
+    </div>
+  </div>
+  <div class="stat-card stat-card--ok">
+    <div class="stat-icon">🟢</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= servers.filter(s => s.online).length %></div>
+      <div class="stat-label">Online</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h3 class="card-title">📋 Department Overview</h3>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <% if (servers.length === 0) { %>
+      <p style="padding:24px; color:var(--text-muted);">No servers found.</p>
+    <% } else { %>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Server</th>
+            <th>Department</th>
+            <th>Members</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% servers.forEach(srv => { %>
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <% if (srv.icon) { %>
+                  <img src="<%= srv.icon %>" alt="" style="width:32px;height:32px;border-radius:50%;" onerror="this.style.display='none'">
+                <% } else { %>
+                  <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;">🏘️</div>
+                <% } %>
+                <div>
+                  <div style="font-weight:600;color:var(--text-primary);"><%= srv.name %></div>
+                  <div style="font-size:11px;color:var(--text-muted);">ID: <%= srv.id %></div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <span class="badge" style="background:<%= srv.color %>22;color:<%= srv.color %>;border:1px solid <%= srv.color %>44;">
+                <%= srv.department %>
+              </span>
+            </td>
+            <td><%= srv.memberCount.toLocaleString() %></td>
+            <td>
+              <% if (srv.online) { %>
+                <span class="badge badge-ok">🟢 Online</span>
+              <% } else { %>
+                <span class="badge badge-danger">🔴 Offline</span>
+              <% } %>
+            </td>
+            <td>
+              <a href="/departments/<%= srv.id %>" class="btn btn-sm btn-outline">View</a>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+</div>
+
+<%- include('partials/footer') %>
