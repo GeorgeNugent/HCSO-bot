@@ -78,9 +78,17 @@ export function startDashboard(context) {
     });
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+    async function getDashboardGuild() {
+        if (!GUILD_ID) return null;
+
+        const cached = client.guilds.cache.get(GUILD_ID);
+        if (cached) return cached;
+
+        return await client.guilds.fetch(GUILD_ID).catch(() => null);
+    }
+
     async function isStaffMember(userId) {
-        if (!GUILD_ID) return false;
-        const guild = client.guilds.cache.get(GUILD_ID);
+        const guild = await getDashboardGuild();
         if (!guild) return false;
         const member = await guild.members.fetch(userId).catch(() => null);
         if (!member) return false;
@@ -195,13 +203,15 @@ export function startDashboard(context) {
         const m = Math.floor((uptime % 3600) / 60);
         const s = Math.floor(uptime % 60);
 
-        const guild = GUILD_ID ? client.guilds.cache.get(GUILD_ID) : null;
+        const guild = await getDashboardGuild();
 
         let totalStrikes = 0;
-        for (const guildStrikes of Object.values(strikes)) {
-            if (typeof guildStrikes !== "object" || Array.isArray(guildStrikes)) continue;
+        const guildStrikes = GUILD_ID ? strikes[GUILD_ID] : null;
+        if (guildStrikes && typeof guildStrikes === "object" && !Array.isArray(guildStrikes)) {
             for (const userStrikes of Object.values(guildStrikes)) {
-                if (Array.isArray(userStrikes)) totalStrikes += userStrikes.length;
+                if (Array.isArray(userStrikes)) {
+                    totalStrikes += userStrikes.length;
+                }
             }
         }
 
@@ -241,20 +251,21 @@ export function startDashboard(context) {
     });
 
     app.get("/commands", requireStaff, async (req, res) => {
-        const guild = GUILD_ID ? client.guilds.cache.get(GUILD_ID) : null;
+        const guild = await getDashboardGuild();
         let members  = [];
         let channels = [];
 
         if (guild) {
             try {
                 await guild.members.fetch();
+                await guild.channels.fetch();
                 members = [...guild.members.cache.values()]
                     .filter(m => !m.user.bot)
                     .map(m => ({ id: m.id, name: m.displayName || m.user.username }))
                     .sort((a, b) => a.name.localeCompare(b.name));
 
                 channels = [...guild.channels.cache.values()]
-                    .filter(c => c.type === 0) // GuildText
+                    .filter(c => c?.isTextBased() && !c.isDMBased() && c.type !== 4)
                     .map(c => ({ id: c.id, name: c.name, parent: c.parent?.name || "Uncategorized" }))
                     .sort((a, b) => a.name.localeCompare(b.name));
             } catch (e) {
@@ -291,8 +302,8 @@ export function startDashboard(context) {
         const logs = [];
 
         if (filter === "all" || filter === "strike") {
-            for (const [, gStrikes] of Object.entries(strikes)) {
-                if (typeof gStrikes !== "object" || Array.isArray(gStrikes)) continue;
+            const gStrikes = GUILD_ID ? strikes[GUILD_ID] : null;
+            if (gStrikes && typeof gStrikes === "object" && !Array.isArray(gStrikes)) {
                 for (const [uid, entries] of Object.entries(gStrikes)) {
                     if (!Array.isArray(entries)) continue;
                     entries.forEach(e => logs.push({
@@ -347,8 +358,8 @@ export function startDashboard(context) {
         }
 
         if (filter === "all" || filter === "blacklist") {
-            for (const [, gBans] of Object.entries(blacklists)) {
-                if (typeof gBans !== "object" || Array.isArray(gBans)) continue;
+            const gBans = GUILD_ID ? blacklists[GUILD_ID] : null;
+            if (gBans && typeof gBans === "object" && !Array.isArray(gBans)) {
                 for (const [uid, entry] of Object.entries(gBans)) {
                     logs.push({
                         type: "blacklist", icon: "🚫", label: "Blacklist",
@@ -524,8 +535,12 @@ export function startDashboard(context) {
         try {
             const { channelId, amount } = req.body;
             if (!channelId || !amount) return res.status(400).json({ error: "Missing channelId or amount" });
+            if (!GUILD_ID) return res.status(400).json({ error: "GUILD_ID not configured" });
 
-            const channel = client.channels.cache.get(channelId);
+            const guild = await getDashboardGuild();
+            if (!guild) return res.status(404).json({ error: "Guild not found" });
+
+            const channel = await guild.channels.fetch(channelId).catch(() => null);
             if (!channel?.isTextBased()) return res.status(404).json({ error: "Text channel not found" });
 
             const count   = Math.min(Math.max(1, parseInt(amount) || 1), 100);
@@ -541,8 +556,12 @@ export function startDashboard(context) {
         try {
             const { channelId, title, message } = req.body;
             if (!channelId || !message) return res.status(400).json({ error: "Missing channelId or message" });
+            if (!GUILD_ID) return res.status(400).json({ error: "GUILD_ID not configured" });
 
-            const channel = client.channels.cache.get(channelId);
+            const guild = await getDashboardGuild();
+            if (!guild) return res.status(404).json({ error: "Guild not found" });
+
+            const channel = await guild.channels.fetch(channelId).catch(() => null);
             if (!channel?.isTextBased()) return res.status(404).json({ error: "Text channel not found" });
 
             const { EmbedBuilder } = await import("discord.js");
