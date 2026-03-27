@@ -628,10 +628,52 @@
         var d = await r.json();
         if (el) {
           el.style.display = 'block';
-          el.style.color = d.success ? '#2ecc71' : '#e74c3c';
-          el.style.background = d.success ? 'rgba(46,204,113,.12)' : 'rgba(231,76,60,.12)';
-          el.style.border = '1px solid ' + (d.success ? '#2ecc7150' : '#e74c3c50');
-          el.textContent = d.message || d.error || (d.success ? 'Done!' : 'Something went wrong.');
+          if (!d.success) {
+            el.style.color = '#e74c3c';
+            el.style.background = 'rgba(231,76,60,.12)';
+            el.style.border = '1px solid #e74c3c50';
+            el.textContent = d.error || 'Something went wrong.';
+            return;
+          }
+          // If the response includes a case object, render its details
+          if (d.case) {
+            var c = d.case;
+            var status = c.status || (c.closedAt ? 'Closed' : 'Open');
+            var assigned = c.assignedTo ? '<@' + c.assignedTo + '> (ID: ' + c.assignedTo + ')' : 'Unassigned';
+            var evidence = Array.isArray(c.evidence) ? c.evidence.length : 0;
+            var rows = [
+              ['ID', c.id || '—'],
+              ['Title', c.title || '—'],
+              ['Status', status],
+              ['Incident Type', c.incidentType || '—'],
+              ['Location', c.location || '—'],
+              ['Suspect', c.suspect || '—'],
+              ['Assigned To', c.assignedTo || 'Unassigned'],
+              ['Summary', c.summary || '—'],
+              ['Evidence Items', evidence],
+              ['Opened At', c.createdAt ? new Date(c.createdAt).toLocaleString() : '—'],
+              ['Submitted By', c.officerId || '—'],
+            ];
+            if (c.closedAt) rows.push(['Closed At', new Date(c.closedAt).toLocaleString()]);
+            if (c.reopenReason) rows.push(['Reopen Reason', c.reopenReason]);
+            var table = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+            rows.forEach(function(row) {
+              table += '<tr style="border-bottom:1px solid rgba(255,255,255,0.07)">'
+                + '<td style="padding:5px 8px;color:#aaa;white-space:nowrap;width:130px">' + row[0] + '</td>'
+                + '<td style="padding:5px 8px;color:#eee;word-break:break-word">' + row[1] + '</td>'
+                + '</tr>';
+            });
+            table += '</table>';
+            el.style.color = '#eee';
+            el.style.background = 'rgba(46,204,113,.08)';
+            el.style.border = '1px solid #2ecc7150';
+            el.innerHTML = table;
+          } else {
+            el.style.color = '#2ecc71';
+            el.style.background = 'rgba(46,204,113,.12)';
+            el.style.border = '1px solid #2ecc7150';
+            el.textContent = d.message || 'Done!';
+          }
         }
       } catch(e) {
         if (el) { el.style.display='block'; el.style.color='#e74c3c'; el.textContent='Request failed: '+e.message; }
