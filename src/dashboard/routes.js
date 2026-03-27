@@ -330,20 +330,62 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         });
     });
 
+    async function getApplicationReviewScope(req) {
+        const userId = req.session.user?.id || null;
+        const isBotOwner = userId === BOT_OWNER_ID;
+        const departments = getAllDepartments();
+        const departmentEntries = Object.entries(departments || {}).filter(([, d]) => d && d.type === "department");
+
+        const mainGuild = await getMainRoleGuild();
+        const member = mainGuild && userId ? await mainGuild.members.fetch(userId).catch(() => null) : null;
+        const roleNames = member ? member.roles.cache.map(r => String(r.name || "").toLowerCase()) : [];
+        const isAdmin = !!(member && member.permissions.has("Administrator"));
+
+        const canViewStaffApplications = isBotOwner
+            || isAdmin
+            || roleNames.some(name => name.includes("staff") || name.includes("administrator") || name.includes("supervisor"));
+
+        let allowedDepartmentGuildIds = [];
+        if (canViewStaffApplications) {
+            allowedDepartmentGuildIds = departmentEntries.map(([id]) => id);
+        } else {
+            allowedDepartmentGuildIds = departmentEntries
+                .filter(([, dept]) => {
+                    const shortName = String(dept.shortName || "").toLowerCase();
+                    const fullName = String(dept.name || "").toLowerCase();
+                    return roleNames.some(role =>
+                        (shortName && role.includes(shortName)) ||
+                        (fullName && role.includes(fullName))
+                    );
+                })
+                .map(([id]) => id);
+        }
+
+        return { canViewStaffApplications, allowedDepartmentGuildIds };
+    }
+
     // ── Applications page ────────────────────────────────────────────────────
     router.get("/applications", requireStaff, segmentGuard("applications"), async (req, res) => {
+        const scope = await getApplicationReviewScope(req);
         const departments = getAllDepartments();
         const allApplications = Object.values(applicationsData?.applications || {})
             .sort((a, b) => new Date(b.startedAt || 0).getTime() - new Date(a.startedAt || 0).getTime());
 
-        const staffApplications = allApplications.filter(a => a.type === "staff");
-        const departmentApplications = allApplications.filter(a => a.type === "department");
+        const staffApplications = scope.canViewStaffApplications
+            ? allApplications.filter(a => a.type === "staff")
+            : [];
+
+        const departmentApplications = allApplications
+            .filter(a => a.type === "department")
+            .filter(a => scope.canViewStaffApplications || scope.allowedDepartmentGuildIds.includes(String(a.departmentGuildId || "")));
+
+        const visibleApplications = [...staffApplications, ...departmentApplications];
 
         const summary = {
-            total: allApplications.length,
-            pending: allApplications.filter(a => a.status === "pending").length,
-            accepted: allApplications.filter(a => a.status === "accepted").length,
-            denied: allApplications.filter(a => a.status === "denied").length
+            total: visibleApplications.length,
+            pending: visibleApplications.filter(a => a.status === "pending").length,
+            accepted: visibleApplications.filter(a => a.status === "accepted").length,
+            denied: visibleApplications.filter(a => a.status === "denied").length
         };
 
         res.render("applications", {
@@ -351,7 +393,8 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             departments,
             staffApplications,
             departmentApplications,
-            summary
+            summary,
+            canViewStaffApplications: scope.canViewStaffApplications
         });
     });
 
@@ -421,6 +464,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Applications review ─────────────────────────────────────────────
     router.post("/api/applications/review", requireStaff, segmentGuard("applications"), async (req, res) => {
         try {
+            const scope = await getApplicationReviewScope(req);
             const appId = String(req.body?.applicationId || "").trim();
             const decision = String(req.body?.decision || "").trim().toLowerCase();
             const reason = String(req.body?.reason || "").trim();
@@ -431,6 +475,18 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
 
             const app = applicationsData?.applications?.[appId];
             if (!app) return res.status(404).json({ error: "Application not found" });
+
+            if (app.type === "staff" && !scope.canViewStaffApplications) {
+                return res.status(403).json({ error: "Only staff can review staff applications." });
+            }
+
+            if (app.type === "department" && !scope.canViewStaffApplications) {
+                const appDept = String(app.departmentGuildId || "");
+                if (!scope.allowedDepartmentGuildIds.includes(appDept)) {
+                    return res.status(403).json({ error: "You can only review applications for your own department." });
+                }
+            }
+
             if (!["pending", "in-review", "in-progress"].includes(app.status)) {
                 return res.status(400).json({ error: `Application is already ${app.status}` });
             }

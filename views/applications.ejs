@@ -111,6 +111,7 @@
     <div class="apps-stat"><div class="apps-stat-value"><%= summary.denied %></div><div class="apps-stat-label">Denied</div></div>
   </div>
 
+  <% if (canViewStaffApplications) { %>
   <div class="section-card">
     <h3 class="section-title">Staff Queue</h3>
     <div class="apps-table-wrap">
@@ -154,6 +155,7 @@
       </table>
     </div>
   </div>
+  <% } %>
 
   <div class="section-card">
     <h3 class="section-title">Department Queue</h3>
