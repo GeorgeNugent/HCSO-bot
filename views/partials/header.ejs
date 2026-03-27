@@ -71,10 +71,8 @@
           <span class="nav-icon">📋</span><span class="nav-label">Logs</span>
         </a>
       <% } %>
-      <% var _resolvedMainServerId = (typeof mainServerId !== 'undefined' && mainServerId) ? String(mainServerId) : ''; %>
       <% var _mainServersForStaff = (typeof servers !== 'undefined' ? servers : []).filter(function(s){
-           var deptType = (departments[s.id] || {}).type;
-           return deptType === 'main' || (_resolvedMainServerId && String(s.id) === _resolvedMainServerId);
+           return (departments[s.id] || {}).type === 'main';
          }); %>
       <% _mainServersForStaff.forEach(function(srv) { %>
         <a href="/departments/<%= srv.id %>"
@@ -102,7 +100,7 @@
       <% if (!segmentAccess || segmentAccess.departments) { %>
         <% var deptServers = (typeof servers !== 'undefined' ? servers : []).filter(function(s){
              var deptType = (departments[s.id] || {}).type;
-             return deptType === 'department' && (!_resolvedMainServerId || String(s.id) !== _resolvedMainServerId);
+             return deptType === 'department';
            }); %>
         <div class="sidebar-section-label" style="margin-top:8px;">Law Enforcement</div>
         <a href="/departments/joint" class="nav-link <%= page === 'joint' ? 'active' : '' %>">
