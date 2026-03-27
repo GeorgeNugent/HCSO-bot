@@ -602,16 +602,23 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
             if (!userId) return res.status(400).json({ error: "userId required" });
             if (!loa) return res.status(503).json({ error: "LOA data not available" });
 
-            if (String(guildId) === HCSO_GUILD_ID) {
-                const guild = await getGuild(guildId);
-                if (!guild) return res.status(404).json({ error: "Guild not found" });
+            const guild = await getGuild(guildId);
+            if (!guild) return res.status(404).json({ error: "Guild not found" });
 
+            const departments = getAllDepartments();
+            const dept = departments[guildId];
+            const shortName = String(dept?.shortName || "").toUpperCase();
+            const isLawEnforcement = ["HCSO", "CPD", "FHP"].includes(shortName);
+
+            // Law enforcement depts require supervisor+ permission
+            if (isLawEnforcement) {
                 const requesterId = req.session.user?.id || null;
                 const requesterMember = requesterId ? await guild.members.fetch(requesterId).catch(() => null) : null;
                 if (!isSupervisorPlus(requesterMember)) {
-                    return res.status(403).json({ error: "Only supervisors+ can end LOA in HCSO." });
+                    return res.status(403).json({ error: `Only supervisors+ can end LOA in ${shortName}.` });
                 }
             }
+            // Staff department allows any staff member
 
             if (!loa[userId]?.onLOA) {
                 return res.status(400).json({ error: "This user is not on LOA" });
