@@ -104,7 +104,7 @@
         <% var visibleDepartmentIds = Array.isArray(accessibleDepartmentIds) ? accessibleDepartmentIds.map(String) : []; %>
         <% var deptServers = Object.entries(typeof departments !== 'undefined' ? departments : {}).filter(function(entry){
              var dept = entry[1] || {};
-             return dept.type === 'department' && (visibleDepartmentIds.length === 0 || visibleDepartmentIds.includes(String(entry[0])));
+             return dept.type === 'department' && visibleDepartmentIds.includes(String(entry[0]));
            }).map(function(entry){
              return {
                id: entry[0],
@@ -113,25 +113,28 @@
                logo: entry[1].logo
              };
            }); %>
-        <div class="sidebar-section-label" style="margin-top:8px;">Law Enforcement</div>
-        <a href="/departments/joint" class="nav-link <%= page === 'joint' ? 'active' : '' %>">
-          <span class="nav-icon">🤝</span><span class="nav-label">Joint Ops</span>
-        </a>
-        <% deptServers.forEach(function(srv) { %>
-          <a href="/departments/<%= srv.id %>"
-             class="nav-link <%= page === 'department' && typeof guildId !== 'undefined' && guildId === srv.id ? 'active' : '' %>"
-             title="<%= srv.name %>">
-            <% if (srv.logo) { %>
-              <span class="nav-icon" style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;"><img src="<%= srv.logo %>" alt="" style="width:24px;height:24px;border-radius:4px;object-fit:contain;" onerror="this.parentElement.textContent='🏛️'"></span>
-            <% } else { %>
-              <span class="nav-icon">🏛️</span>
-            <% } %>
-            <span class="nav-label" style="font-size:12px;"><%= srv.shortName || srv.name %></span>
+        <% var canSeeLawSection = isBotOwner || deptServers.length > 0; %>
+        <% if (canSeeLawSection) { %>
+          <div class="sidebar-section-label" style="margin-top:8px;">Law Enforcement</div>
+          <a href="/departments/joint" class="nav-link <%= page === 'joint' ? 'active' : '' %>">
+            <span class="nav-icon">🤝</span><span class="nav-label">Joint Ops</span>
           </a>
-        <% }); %>
-        <a href="/servers" class="nav-link <%= page === 'servers' ? 'active' : '' %>">
-          <span class="nav-icon">🌐</span><span class="nav-label">All Servers</span>
-        </a>
+          <% deptServers.forEach(function(srv) { %>
+            <a href="/departments/<%= srv.id %>"
+               class="nav-link <%= page === 'department' && typeof guildId !== 'undefined' && guildId === srv.id ? 'active' : '' %>"
+               title="<%= srv.name %>">
+              <% if (srv.logo) { %>
+                <span class="nav-icon" style="display:flex;align-items:center;justify-content:center;width:24px;height:24px;"><img src="<%= srv.logo %>" alt="" style="width:24px;height:24px;border-radius:4px;object-fit:contain;" onerror="this.parentElement.textContent='🏛️'"></span>
+              <% } else { %>
+                <span class="nav-icon">🏛️</span>
+              <% } %>
+              <span class="nav-label" style="font-size:12px;"><%= srv.shortName || srv.name %></span>
+            </a>
+          <% }); %>
+          <a href="/servers" class="nav-link <%= page === 'servers' ? 'active' : '' %>">
+            <span class="nav-icon">🌐</span><span class="nav-label">All Servers</span>
+          </a>
+        <% } %>
       <% } %>
     </nav>
     <div class="sidebar-footer">

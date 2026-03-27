@@ -299,7 +299,6 @@ export function startDashboard(context) {
                     : [];
 
                 if (allowedRoleIds.length === 0) {
-                    accessibleDepartmentIds.push(departmentGuildId);
                     continue;
                 }
 

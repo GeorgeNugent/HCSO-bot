@@ -98,7 +98,7 @@ export function createDepartmentRoutes({ requireAuth, requireStaff, segmentGuard
 
     // ── All servers / departments overview ────────────────────────────────────
         // -- Joint Operations --
-    router.get("/departments/joint", requireAuth, segmentGuard("departments"), async (req, res) => {
+    router.get("/departments/joint", requireAuth, segmentGuard("departments"), requireAnyDepartmentAccess, async (req, res) => {
         try {
             const branding    = getBranding();
             const departments = getAllDepartments();
@@ -149,7 +149,7 @@ export function createDepartmentRoutes({ requireAuth, requireStaff, segmentGuard
             res.render("error", { page: "error", message: "Could not load joint operations.", branding: getBranding() });
         }
     });
-    router.get("/servers", requireAuth, segmentGuard("departments"), async (req, res) => {
+    router.get("/servers", requireAuth, segmentGuard("departments"), requireAnyDepartmentAccess, async (req, res) => {
         try {
             const requesterId = req.session.user?.id || "";
             const allServers  = await serverStats.getAllServers();
@@ -354,8 +354,8 @@ export function createDepartmentRoutes({ requireAuth, requireStaff, segmentGuard
             }))
             .filter(policy => policy.allowedRoleIds.length > 0);
 
-        // No explicit policy means fallback to standard staff access.
-        if (rolePolicies.length === 0) return true;
+        // No explicit policy means no department access.
+        if (rolePolicies.length === 0) return false;
 
         for (const policy of rolePolicies) {
             const policyRoleSourceGuildId = getRoleSourceGuildIdForDepartment(policy.guildId);
@@ -393,6 +393,40 @@ export function createDepartmentRoutes({ requireAuth, requireStaff, segmentGuard
 
         if (req.path.startsWith("/api/")) {
             return res.status(403).json({ error: "Access denied for this department" });
+        }
+        return res.render("access-denied", { page: "denied" });
+    }
+
+    async function hasAnyDepartmentAccess(userId) {
+        if (!userId) return false;
+        if (BOT_OWNER_IDS.includes(String(userId))) return true;
+
+        const departments = getAllDepartments();
+        const configuredDepartmentIds = Object.entries(departments)
+            .filter(([, dept]) => dept && dept.type === "department")
+            .map(([guildId]) => String(guildId));
+
+        for (const configuredGuildId of configuredDepartmentIds) {
+            const resolvedGuildId = await resolveDashboardGuildId(configuredGuildId);
+            const allowed = await canAccessDepartmentByGuildIds(userId, configuredGuildId, resolvedGuildId);
+            if (allowed) return true;
+        }
+
+        return false;
+    }
+
+    async function requireAnyDepartmentAccess(req, res, next) {
+        if (!req.session.user) {
+            req.session.returnTo = req.originalUrl;
+            return res.redirect("/auth/discord");
+        }
+
+        const requesterId = String(req.session.user.id || "");
+        const allowed = await hasAnyDepartmentAccess(requesterId);
+        if (allowed) return next();
+
+        if (req.path.startsWith("/api/")) {
+            return res.status(403).json({ error: "Access denied: no department access" });
         }
         return res.render("access-denied", { page: "denied" });
     }
