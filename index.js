@@ -1739,30 +1739,24 @@ const commands = [
 // Register commands
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 try {
-    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-    console.log(`Registered ${commands.length} application commands.`);
+    // Force guild-only command mode for multi-server operation.
+    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: [] });
+    console.log("Cleared global application commands (guild-only mode enabled).");
 
-    // Register onlinedash as a guild command for instant availability in known servers.
-    const guildQuickCommands = [
-        new SlashCommandBuilder()
-            .setName("onlinedash")
-            .setDescription("Post the web dashboard link in chat")
-            .toJSON()
-    ];
-    const quickGuildIds = Array.from(new Set([
+    const configuredGuildIds = Object.keys(getAllDepartments())
+        .filter(id => /^\d{17,20}$/.test(String(id)));
+
+    const commandGuildIds = Array.from(new Set([
         GUILD_ID,
-        "1482203107432595601", // HCSO
-        "1482501585803415572", // CPD
-        "1482498655523962892", // FHP
-        "1300239835293814925"  // Main server
+        ...configuredGuildIds
     ].filter(Boolean)));
 
-    if (quickGuildIds.length === 0) {
-        console.warn("No guild IDs available for /onlinedash quick command registration.");
+    if (commandGuildIds.length === 0) {
+        console.warn("No guild IDs available for guild command registration.");
     } else {
-        for (const guildId of quickGuildIds) {
-            await rest.put(Routes.applicationGuildCommands(CLIENT_ID, guildId), { body: guildQuickCommands });
-            console.log(`Registered guild quick command /onlinedash for guild ${guildId}`);
+        for (const guildId of commandGuildIds) {
+            await rest.put(Routes.applicationGuildCommands(CLIENT_ID, guildId), { body: commands });
+            console.log(`Registered ${commands.length} guild commands for guild ${guildId}`);
         }
     }
 } catch (error) {
