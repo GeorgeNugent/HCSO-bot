@@ -154,7 +154,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     });
 
     // ── Dashboard home ────────────────────────────────────────────────────────
-    router.get("/", requireStaff, segmentGuard("home"), async (req, res) => {
+    router.get("/", requireAuth, segmentGuard("home"), async (req, res) => {
         const uptime = process.uptime();
         const h = Math.floor(uptime / 3600);
         const m = Math.floor((uptime % 3600) / 60);

@@ -111,9 +111,10 @@ export function startDashboard(context) {
 
     function canAccessSegment(userId, roleIds, segment, guildId = MAIN_ROLE_GUILD_ID) {
         if (BOT_OWNER_IDS.includes(String(userId))) return true;
+        if (segment === "home") return true;
         const access = getSegmentAccessConfig(guildId);
         const allowedRoles = Array.isArray(access[segment]) ? access[segment] : [];
-        if (allowedRoles.length === 0) return true;
+        if (allowedRoles.length === 0) return false;
         return allowedRoles.some(id => roleIds.includes(id));
     }
 
