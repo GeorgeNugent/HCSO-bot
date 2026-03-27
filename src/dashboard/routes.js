@@ -386,11 +386,26 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             ? allApplications.filter(a => a.type === "staff")
             : [];
 
-        const departmentApplications = allApplications
-            .filter(a => a.type === "department")
-            .filter(a => scope.canViewStaffApplications || scope.allowedDepartmentGuildIds.includes(String(a.departmentGuildId || "")));
+        // Build per-department application lists
+        const departmentAppsByGuildId = {};
+        
+        for (const [guildId, dept] of Object.entries(departments)) {
+            if (!dept || dept.type !== "department") continue;
+            if (!scope.canViewStaffApplications && !scope.allowedDepartmentGuildIds.includes(guildId)) continue;
+            
+            departmentAppsByGuildId[guildId] = {
+                name: dept.name,
+                shortName: dept.shortName,
+                apps: allApplications.filter(a => 
+                    a.type === "department" && a.departmentGuildId === guildId
+                )
+            };
+        }
 
-        const visibleApplications = [...staffApplications, ...departmentApplications];
+        const visibleApplications = [
+            ...staffApplications,
+            ...Object.values(departmentAppsByGuildId).flatMap(d => d.apps)
+        ];
 
         const summary = {
             total: visibleApplications.length,
@@ -403,7 +418,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             page: "applications",
             departments,
             staffApplications,
-            departmentApplications,
+            departmentAppsByGuildId,
             summary,
             canViewStaffApplications: scope.canViewStaffApplications
         });

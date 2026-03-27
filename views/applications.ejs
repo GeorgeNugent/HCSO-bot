@@ -157,14 +157,15 @@
   </div>
   <% } %>
 
+  <!-- Per-Department Application Queues -->
+  <% Object.entries(departmentAppsByGuildId || {}).forEach(function([guildId, dept]){ %>
   <div class="section-card">
-    <h3 class="section-title">Department Queue</h3>
+    <h3 class="section-title"><%= dept.shortName || dept.name %> Application Queue</h3>
     <div class="apps-table-wrap">
       <table class="apps-table">
         <thead>
           <tr>
             <th>ID</th>
-            <th>Department</th>
             <th>Applicant</th>
             <th>Status</th>
             <th>Submitted</th>
@@ -173,13 +174,12 @@
           </tr>
         </thead>
         <tbody>
-          <% if (!departmentApplications.length) { %>
-            <tr><td colspan="7" class="text-muted">No department applications yet.</td></tr>
+          <% if (!dept.apps || !dept.apps.length) { %>
+            <tr><td colspan="6" class="text-muted">No applications yet.</td></tr>
           <% } %>
-          <% departmentApplications.forEach(function(app){ %>
+          <% (dept.apps || []).forEach(function(app){ %>
             <tr>
               <td><strong><%= app.id %></strong></td>
-              <td><%= app.departmentName || app.departmentGuildId || 'Unknown' %></td>
               <td><%= app.applicantTag || app.applicantId %><br><span class="text-muted"><%= app.applicantId %></span></td>
               <td><span class="apps-badge <%= app.status %>"><%= app.status %></span></td>
               <td><%= app.submittedAt ? new Date(app.submittedAt).toLocaleString() : 'Not submitted' %></td>
@@ -189,15 +189,20 @@
               <td>
                 <div class="app-actions">
                   <button class="btn btn-success btn-sm" onclick="reviewApplication('<%= app.id %>','accepted')">Accept</button>
-                  <button class="btn btn-danger btn-sm" onclick="toggleDeny('dept-<%= app.id %>')">Deny</button>
+                  <button class="btn btn-danger btn-sm" onclick="toggleDeny('<%= guildId %>-<%= app.id %>')">Deny</button>
                 </div>
-                <div class="inline-deny" id="deny-dept-<%= app.id %>">
-                  <input id="deny-reason-dept-<%= app.id %>" placeholder="Reason for denial">
-                  <button class="btn btn-danger btn-sm" onclick="reviewApplication('<%= app.id %>','denied',document.getElementById('deny-reason-dept-<%= app.id %>').value)">Submit</button>
+                <div class="inline-deny" id="deny-<%= guildId %>-<%= app.id %>">
+                  <input id="deny-reason-<%= guildId %>-<%= app.id %>" placeholder="Reason for denial">
+                  <button class="btn btn-danger btn-sm" onclick="reviewApplication('<%= app.id %>','denied',document.getElementById('deny-reason-<%= guildId %>-<%= app.id %>').value)">Submit</button>
                 </div>
               </td>
             </tr>
           <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <% }); %>
         </tbody>
       </table>
     </div>

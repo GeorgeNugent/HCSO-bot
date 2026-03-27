@@ -480,38 +480,18 @@
 <!-- ─── Settings tab panel ──────────────────────────────────────────────── -->
 <div id="dtab-settings" class="tab-panel">
   <div class="card">
-    <div class="card-header"><h3 class="card-title">⚙️ Department Access Settings</h3></div>
+    <div class="card-header"><h3 class="card-title">⚙️ Staff Access Settings</h3></div>
     <div class="card-body">
-      <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Configure who can view and manage permissions for this department on the dashboard.</p>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:24px;">Select which staff roles from the main server can access this department.</p>
       
-      <!-- Dashboard Segment Access -->
-      <div style="margin-bottom:24px;">
-        <h4 style="color:var(--text-primary);font-weight:600;margin-bottom:12px;">📊 Dashboard Segment Access</h4>
-        <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">Select which roles can view the "Departments" segment in the dashboard.</p>
-        <div id="segment-access-loading" style="color:var(--text-muted);">Loading roles…</div>
-        <div id="segment-access-container" style="display:none;margin-bottom:12px;max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:12px;"></div>
-        <button class="btn btn-primary btn-sm" onclick="saveSegmentAccess()" id="segment-save-btn" style="display:none;">Save Segment Access</button>
-        <div id="segment-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
-      </div>
-
-      <!-- Suggestion Reviewer Roles -->
-      <div style="margin-bottom:24px;">
-        <h4 style="color:var(--text-primary);font-weight:600;margin-bottom:12px;">💬 Suggestion Reviewers</h4>
-        <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">Select which roles can review suggestions for this department.</p>
-        <div id="suggestion-reviewer-loading" style="color:var(--text-muted);">Loading roles…</div>
-        <div id="suggestion-reviewer-container" style="display:none;margin-bottom:12px;max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:12px;"></div>
-        <button class="btn btn-primary btn-sm" onclick="saveSuggestionReviewers()" id="suggestion-save-btn" style="display:none;">Save Suggestion Reviewers</button>
-        <div id="suggestion-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
-      </div>
-
-      <!-- Application Reviewer Roles -->
+      <!-- Department Access (Main Server Roles) -->
       <div>
-        <h4 style="color:var(--text-primary);font-weight:600;margin-bottom:12px;">📝 Application Reviewers</h4>
-        <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">Select which roles can review applications for this department.</p>
-        <div id="application-reviewer-loading" style="color:var(--text-muted);">Loading roles…</div>
-        <div id="application-reviewer-container" style="display:none;margin-bottom:12px;max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:12px;"></div>
-        <button class="btn btn-primary btn-sm" onclick="saveApplicationReviewers()" id="application-save-btn" style="display:none;">Save Application Reviewers</button>
-        <div id="application-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
+        <h4 style="color:var(--text-primary);font-weight:600;margin-bottom:12px;">👥 Department Access</h4>
+        <p style="color:var(--text-muted);font-size:12px;margin-bottom:12px;">Select roles from the main server that can view and manage this department on the dashboard.</p>
+        <div id="dept-access-loading" style="color:var(--text-muted);">Loading roles…</div>
+        <div id="dept-access-container" style="display:none;margin-bottom:12px;max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:12px;"></div>
+        <button class="btn btn-primary btn-sm" onclick="saveDeptAccess()" id="dept-access-save-btn" style="display:none;">Save Department Access</button>
+        <div id="dept-access-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
       </div>
     </div>
   </div>
@@ -680,7 +660,7 @@
     }
 
     // ── Settings Tab Functions ────────────────────────────────────────────────
-    var deptSettingsCache = { roles: [], segmentAccess: [], suggestionReviewers: [], applicationReviewers: [] };
+    var deptSettingsCache = { roles: [], deptAccess: [] };
 
     async function loadDepartmentSettings() {
       try {
@@ -688,17 +668,13 @@
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'Failed to load settings');
         
-        deptSettingsCache.roles = data.roles || [];
-        deptSettingsCache.segmentAccess = data.segmentAccess || [];
-        deptSettingsCache.suggestionReviewers = data.suggestionReviewers || [];
-        deptSettingsCache.applicationReviewers = data.applicationReviewers || [];
+        deptSettingsCache.roles = data.mainServerRoles || [];
+        deptSettingsCache.deptAccess = data.departmentAccess || [];
         
-        renderRoleCheckboxes('segment-access-container', 'segment-access-loading', deptSettingsCache.segmentAccess, 'segment-save-btn');
-        renderRoleCheckboxes('suggestion-reviewer-container', 'suggestion-reviewer-loading', deptSettingsCache.suggestionReviewers, 'suggestion-save-btn');
-        renderRoleCheckboxes('application-reviewer-container', 'application-reviewer-loading', deptSettingsCache.applicationReviewers, 'application-save-btn');
+        renderRoleCheckboxes('dept-access-container', 'dept-access-loading', deptSettingsCache.deptAccess, 'dept-access-save-btn');
       } catch(e) {
         console.error('Error loading settings:', e);
-        document.getElementById('segment-access-loading').textContent = 'Error loading settings: ' + e.message;
+        document.getElementById('dept-access-loading').textContent = 'Error loading settings: ' + e.message;
       }
     }
 
@@ -707,7 +683,7 @@
       const loading = document.getElementById(loadingId);
       
       if (!deptSettingsCache.roles || deptSettingsCache.roles.length === 0) {
-        loading.textContent = 'No roles available for this server.';
+        loading.textContent = 'No roles available from main server.';
         return;
       }
 
@@ -747,51 +723,19 @@
       el.textContent = message || (success ? 'Saved!' : 'Error saving');
     }
 
-    async function saveSegmentAccess() {
-      const roleIds = getSelectedRoleIds('segment-access-container');
+    async function saveDeptAccess() {
+      const roleIds = getSelectedRoleIds('dept-access-container');
       try {
-        const res = await fetch('/api/guild/' + GUILD_ID + '/settings/segment-access', {
+        const res = await fetch('/api/guild/' + GUILD_ID + '/settings/department-access', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ roleIds })
         });
         const data = await res.json();
-        showResult('segment-result', data.success, data.message || (data.success ? 'Segment access updated' : data.error));
-        if (data.success) deptSettingsCache.segmentAccess = roleIds;
+        showResult('dept-access-result', data.success, data.message || (data.success ? 'Department access updated' : data.error));
+        if (data.success) deptSettingsCache.deptAccess = roleIds;
       } catch(e) {
-        showResult('segment-result', false, 'Request failed: ' + e.message);
-      }
-    }
-
-    async function saveSuggestionReviewers() {
-      const roleIds = getSelectedRoleIds('suggestion-reviewer-container');
-      try {
-        const res = await fetch('/api/guild/' + GUILD_ID + '/settings/suggestion-reviewers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ roleIds })
-        });
-        const data = await res.json();
-        showResult('suggestion-result', data.success, data.message || (data.success ? 'Suggestion reviewers updated' : data.error));
-        if (data.success) deptSettingsCache.suggestionReviewers = roleIds;
-      } catch(e) {
-        showResult('suggestion-result', false, 'Request failed: ' + e.message);
-      }
-    }
-
-    async function saveApplicationReviewers() {
-      const roleIds = getSelectedRoleIds('application-reviewer-container');
-      try {
-        const res = await fetch('/api/guild/' + GUILD_ID + '/settings/application-reviewers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ roleIds })
-        });
-        const data = await res.json();
-        showResult('application-result', data.success, data.message || (data.success ? 'Application reviewers updated' : data.error));
-        if (data.success) deptSettingsCache.applicationReviewers = roleIds;
-      } catch(e) {
-        showResult('application-result', false, 'Request failed: ' + e.message);
+        showResult('dept-access-result', false, 'Request failed: ' + e.message);
       }
     }
 

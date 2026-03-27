@@ -205,6 +205,9 @@ if (!Array.isArray(config.applicationReviewerRoleIds)) {
 if (!config.applicationReviewerRoleIdsByGuild || typeof config.applicationReviewerRoleIdsByGuild !== "object") {
     config.applicationReviewerRoleIdsByGuild = {};
 }
+if (!config.departmentAccessByGuild || typeof config.departmentAccessByGuild !== "object") {
+    config.departmentAccessByGuild = {};
+}
 
 function saveStrikes() {
     writeJsonData("strikes.json", strikes);
