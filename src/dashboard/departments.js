@@ -21,12 +21,30 @@ import { getAllDepartments, getBranding } from "../embeds/departmentThemes.js";
  */
 export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats, client, config, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES, patrols, loa, casesData, saveCases, saveLOA }) {
     const router = Router();
+    const HCSO_GUILD_ID = "1482203107432595601";
     const STRIKE_ROLE_IDS = [
         "1485084924921774242",
         "1485084972535648326",
         "1485085025157382244"
     ];
     const SHERIFF_ALERT_ROLE_ID = "1482203108108013584";
+
+    function isSupervisorPlus(member) {
+        if (!member) return false;
+        if (member.permissions?.has?.("Administrator")) return true;
+
+        return member.roles.cache.some(role => {
+            const name = String(role.name || "").toLowerCase();
+            return name.includes("supervisor")
+                || name.includes("command")
+                || name.includes("sheriff")
+                || name.includes("undersheriff")
+                || name.includes("assistant sheriff")
+                || name.includes("chief deputy")
+                || name.includes("captain")
+                || name.includes("major");
+        });
+    }
 
     // ── Case helpers (mirrored from routes.js) ────────────────────────────────
     function resolveCaseKey(rawId) {
@@ -202,6 +220,14 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
                     return { id: uid, name: m?.name || uid, startDate: d.startDate, endDate: d.endDate };
                 });
 
+            const isHcsoDepartment = String(guildId) === HCSO_GUILD_ID || String(dept?.shortName || "").toUpperCase() === "HCSO";
+            let canManageEndLoa = true;
+            if (isHcsoDepartment) {
+                const requesterId = req.session.user?.id || null;
+                const requesterMember = requesterId && guild ? await guild.members.fetch(requesterId).catch(() => null) : null;
+                canManageEndLoa = isSupervisorPlus(requesterMember);
+            }
+
             // Strike log for this guild
             const guildStrikeStore = strikes[guildId] || {};
             const deptStrikeLogs = Object.entries(guildStrikeStore)
@@ -227,7 +253,9 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
                 deptCases,
                 deptOpenCases,
                 usersOnLoa,
-                deptStrikeLogs
+                deptStrikeLogs,
+                isHcsoDepartment,
+                canManageEndLoa
             });
         } catch (err) {
             console.error("[Dept] /departments/:guildId error:", err.message);
@@ -568,9 +596,21 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
     // ── API: LOA – End ────────────────────────────────────────────────────────
     router.post("/api/guild/:guildId/end-loa", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
+            const { guildId } = req.params;
             const { userId } = req.body;
             if (!userId) return res.status(400).json({ error: "userId required" });
             if (!loa) return res.status(503).json({ error: "LOA data not available" });
+
+            if (String(guildId) === HCSO_GUILD_ID) {
+                const guild = await getGuild(guildId);
+                if (!guild) return res.status(404).json({ error: "Guild not found" });
+
+                const requesterId = req.session.user?.id || null;
+                const requesterMember = requesterId ? await guild.members.fetch(requesterId).catch(() => null) : null;
+                if (!isSupervisorPlus(requesterMember)) {
+                    return res.status(403).json({ error: "Only supervisors+ can end LOA in HCSO." });
+                }
+            }
 
             if (!loa[userId]?.onLOA) {
                 return res.status(400).json({ error: "This user is not on LOA" });
