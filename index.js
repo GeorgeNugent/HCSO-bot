@@ -1480,6 +1480,24 @@ const commands = [
         .setDescription("Start a patrol logging session"),
 
     new SlashCommandBuilder()
+        .setName("patrolannouncements")
+        .setDescription("Post a patrol announcement with reactions")
+        .addStringOption(o => o
+            .setName("time")
+            .setDescription("Patrol time (example: 7:00)")
+            .setRequired(true)
+        )
+        .addStringOption(o => o
+            .setName("ampm")
+            .setDescription("AM or PM")
+            .setRequired(true)
+            .addChoices(
+                { name: "AM", value: "AM" },
+                { name: "PM", value: "PM" }
+            )
+        ),
+
+    new SlashCommandBuilder()
         .setName("patrol-today")
         .setDescription("View your patrol hours today")
         .addUserOption(o => o.setName("user").setDescription("User (optional)").setRequired(false)),
@@ -4519,6 +4537,56 @@ client.on("interactionCreate", async interaction => {
         return interaction.reply({
             embeds: [embed],
             components: [row]
+        });
+    }
+
+    // /patrolannouncements
+    if (interaction.commandName === "patrolannouncements") {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
+            return interaction.reply({
+                content: "❌ You don't have permission to post patrol announcements.",
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        const timeInput = interaction.options.getString("time").trim();
+        const ampmInput = interaction.options.getString("ampm").toUpperCase();
+
+        const validTime = /^([1-9]|1[0-2])(:[0-5][0-9])?$/.test(timeInput);
+        if (!validTime) {
+            return interaction.reply({
+                content: "❌ Invalid time. Use format like `7` or `7:00`.",
+                flags: MessageFlags.Ephemeral
+            });
+        }
+
+        const patrolAnnouncement = [
+            "🚓 Patrol Ping 🚓",
+            "",
+            "Select your patrol area by reacting below:",
+            "1️⃣ Sandy Shores & Route 68",
+            "2️⃣ Mirror Park",
+            "3️⃣ Paleto Bay",
+            "",
+            `Patrol is at: ${timeInput}${ampmInput} CST`,
+            "",
+            "Make sure you're in the CAD!",
+            "",
+            "React below:",
+            "❌ No",
+            "❓ Maybe/Late",
+            "✅ Yes"
+        ].join("\n");
+
+        const postedMessage = await interaction.channel.send({ content: patrolAnnouncement });
+
+        for (const emoji of ["✅", "❌", "❓", "1️⃣", "2️⃣", "3️⃣"]) {
+            await postedMessage.react(emoji).catch(() => {});
+        }
+
+        return interaction.reply({
+            content: `✅ Patrol announcement posted for ${timeInput}${ampmInput} CST.`,
+            flags: MessageFlags.Ephemeral
         });
     }
 
