@@ -1,0 +1,125 @@
+<%- include('partials/header') %>
+
+<div class="page-header">
+  <h2 class="page-title">⚙️ Settings</h2>
+  <p class="page-subtitle">Bot configuration overview</p>
+</div>
+
+<!-- Bot Status -->
+<div class="section-card">
+  <h3 class="section-title">Bot Status</h3>
+  <p class="section-desc">Current: <strong><%= cfg.currentStatus %></strong></p>
+  <form class="cmd-form" style="max-width:400px;">
+    <label>Set New Status</label>
+    <select id="statusSelect">
+      <option value="online"           <%= cfg.currentStatus === 'online'           ? 'selected' : '' %>>🟢 Online</option>
+      <option value="idle"             <%= cfg.currentStatus === 'idle'             ? 'selected' : '' %>>🌙 Idle</option>
+      <option value="dnd"              <%= cfg.currentStatus === 'dnd'              ? 'selected' : '' %>>⛔ Do Not Disturb</option>
+      <option value="invisible"        <%= cfg.currentStatus === 'invisible'        ? 'selected' : '' %>>👻 Invisible</option>
+      <option value="watching_patrol"  <%= cfg.currentStatus === 'watching_patrol'  ? 'selected' : '' %>>👀 Watching Patrol Logs</option>
+      <option value="listening_radio"  <%= cfg.currentStatus === 'listening_radio'  ? 'selected' : '' %>>🎧 Listening to Radio Traffic</option>
+      <option value="playing_hcso"     <%= cfg.currentStatus === 'playing_hcso'     ? 'selected' : '' %>>🎮 Playing HCSO Operations</option>
+      <option value="watching_hc"      <%= cfg.currentStatus === 'watching_hc'      ? 'selected' : '' %>>🏘️ Watching Over Hendry County</option>
+      <option value="competing_patrol" <%= cfg.currentStatus === 'competing_patrol' ? 'selected' : '' %>>🏆 Competing in Patrol Hours</option>
+    </select>
+    <button type="button" class="btn btn-info" onclick="updateStatus()">Apply Status</button>
+    <div id="status-result" class="inline-result" style="display:none"></div>
+  </form>
+</div>
+
+<!-- Log Channels -->
+<div class="section-card" style="margin-top:20px;">
+  <h3 class="section-title">Configured Log Channels</h3>
+  <% const lcKeys = Object.entries(cfg.logChannels).filter(([k,v]) => typeof v === 'string' && v); %>
+  <% if (lcKeys.length === 0) { %>
+    <p class="empty-state">No log channels configured. Use <code>/set-log-channel</code> in Discord.</p>
+  <% } else { %>
+  <table class="log-table">
+    <thead><tr><th>Log Type</th><th>Channel ID</th></tr></thead>
+    <tbody>
+      <% lcKeys.forEach(([type, id]) => { %>
+      <tr>
+        <td><strong><%= type %></strong></td>
+        <td><code><%= id %></code></td>
+      </tr>
+      <% }); %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+
+<!-- Blacklist join action -->
+<div class="section-card" style="margin-top:20px;">
+  <h3 class="section-title">Blacklist Join Action</h3>
+  <p class="section-desc">
+    When a blacklisted user joins the server, the bot will automatically:
+    <strong><%= cfg.blacklistJoinAction === 'kick' ? 'Kick' : 'Ban' %></strong> them.
+  </p>
+  <p class="section-desc">Change this setting using <code>/set-blacklist-action</code> in Discord.</p>
+</div>
+
+<!-- Ticket Types -->
+<% if (cfg.ticketTypes && cfg.ticketTypes.length > 0) { %>
+<div class="section-card" style="margin-top:20px;">
+  <h3 class="section-title">Ticket Types (<%= cfg.ticketTypes.length %>)</h3>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;">
+    <% cfg.ticketTypes.forEach(t => { %>
+    <span class="filter-chip <%= t.enabled ? 'active' : '' %>">
+      <%= t.label %> <%= t.enabled ? '' : '(hidden)' %>
+    </span>
+    <% }); %>
+  </div>
+</div>
+<% } %>
+
+<!-- Module Role Access -->
+<div class="section-card" style="margin-top:20px;">
+  <h3 class="section-title">Module Role Access</h3>
+  <table class="log-table">
+    <thead><tr><th>Module</th><th>Allowed Role IDs</th></tr></thead>
+    <tbody>
+      <% Object.entries(cfg.moduleRoleAccess).forEach(([mod, ids]) => { %>
+      <tr>
+        <td><strong><%= mod %></strong></td>
+        <td><% if (ids.length === 0) { %>
+          <span class="text-muted">Default (role name check)</span>
+        <% } else { %>
+          <% ids.forEach(id => { %><code><%= id %></code> <% }); %>
+        <% } %></td>
+      </tr>
+      <% }); %>
+    </tbody>
+  </table>
+  <p class="section-desc" style="margin-top:8px;">Use <code>/set-module-access</code> in Discord to configure these.</p>
+</div>
+
+<script>
+async function updateStatus() {
+  const status = document.getElementById("statusSelect").value;
+  const resultEl = document.getElementById("status-result");
+  resultEl.style.display = "block";
+  resultEl.className = "inline-result";
+  resultEl.textContent = "Updating...";
+
+  try {
+    const r = await fetch("/api/settings/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status })
+    });
+    const d = await r.json();
+    if (d.success) {
+      resultEl.textContent = "✅ Status updated!";
+      resultEl.classList.add("result-success");
+    } else {
+      resultEl.textContent = "❌ " + (d.error || "Failed");
+      resultEl.classList.add("result-error");
+    }
+  } catch (e) {
+    resultEl.textContent = "❌ Network error";
+    resultEl.classList.add("result-error");
+  }
+}
+</script>
+
+<%- include('partials/footer') %>

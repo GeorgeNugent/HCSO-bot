@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof pageTitle !== 'undefined' ? pageTitle : botName %> — Dashboard</title>
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+
+<!-- Top Navigation Bar -->
+<header class="topbar">
+  <div class="topbar-brand">
+    <% if (botAvatar) { %>
+      <img src="<%= botAvatar %>" alt="" class="topbar-avatar" onerror="this.style.display='none'">
+    <% } %>
+    <span class="topbar-title"><%= botName %></span>
+    <span class="topbar-badge">Dashboard</span>
+  </div>
+  <div class="topbar-user">
+    <% if (user) { %>
+      <img src="<%= user.avatar %>" alt="" class="topbar-user-avatar" onerror="this.style.display='none'">
+      <span class="topbar-username"><%= user.username %></span>
+      <a href="/auth/logout" class="btn btn-sm btn-outline">Logout</a>
+    <% } %>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <nav class="sidebar-nav">
+      <a href="/"         class="nav-link <%= page === 'home'     ? 'active' : '' %>">
+        <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
+      </a>
+      <a href="/status"   class="nav-link <%= page === 'status'   ? 'active' : '' %>">
+        <span class="nav-icon">📊</span><span class="nav-label">Bot Status</span>
+      </a>
+      <a href="/commands" class="nav-link <%= page === 'commands' ? 'active' : '' %>">
+        <span class="nav-icon">⚡</span><span class="nav-label">Commands</span>
+      </a>
+      <a href="/logs"     class="nav-link <%= page === 'logs'     ? 'active' : '' %>">
+        <span class="nav-icon">📋</span><span class="nav-label">Logs</span>
+      </a>
+      <a href="/settings" class="nav-link <%= page === 'settings' ? 'active' : '' %>">
+        <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="sidebar-footer-text">HCSO Staff Panel</span>
+    </div>
+  </aside>
+
+  <!-- Main content starts here — closed in footer.ejs -->
+  <main class="main-content">

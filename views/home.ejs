@@ -1,0 +1,92 @@
+<%- include('partials/header') %>
+
+<div class="page-header">
+  <h2 class="page-title">🏠 Overview</h2>
+  <p class="page-subtitle">Welcome back, <strong><%= user.username %></strong></p>
+</div>
+
+<!-- Stat cards row 1 -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon">🟢</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= ping %>ms</div>
+      <div class="stat-label">API Latency</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">⏱️</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= uptime %></div>
+      <div class="stat-label">Uptime</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🏘️</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= guildCount %></div>
+      <div class="stat-label">Servers</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">👥</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= memberCount %></div>
+      <div class="stat-label">Members</div>
+    </div>
+  </div>
+</div>
+
+<!-- Stat cards row 2 -->
+<div class="stats-grid" style="margin-top:12px;">
+  <div class="stat-card stat-card--warn">
+    <div class="stat-icon">⚖️</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= totalStrikes %></div>
+      <div class="stat-label">Total Strikes</div>
+    </div>
+  </div>
+  <div class="stat-card stat-card--info">
+    <div class="stat-icon">🚔</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= activePatrols %></div>
+      <div class="stat-label">Active Patrols</div>
+    </div>
+  </div>
+  <div class="stat-card stat-card--info">
+    <div class="stat-icon">🌴</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= activeLoas %></div>
+      <div class="stat-label">Active LOAs</div>
+    </div>
+  </div>
+  <div class="stat-card stat-card--success">
+    <div class="stat-icon">📋</div>
+    <div class="stat-body">
+      <div class="stat-value"><%= openCases %></div>
+      <div class="stat-label">Open Cases</div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick actions -->
+<div class="section-card" style="margin-top:24px;">
+  <h3 class="section-title">Quick Actions</h3>
+  <div class="quick-grid">
+    <a href="/commands#moderation" class="quick-btn">🔨 Moderation</a>
+    <a href="/commands#staffmgmt"  class="quick-btn">🌴 LOA Manager</a>
+    <a href="/commands#cases"      class="quick-btn">📋 Cases</a>
+    <a href="/commands#announce"   class="quick-btn">📢 Announce</a>
+    <a href="/logs"                class="quick-btn">📜 View Logs</a>
+    <a href="/status"              class="quick-btn">📊 Bot Status</a>
+  </div>
+</div>
+
+<!-- Open tickets summary -->
+<% if (openTickets > 0) { %>
+<div class="alert alert-info" style="margin-top:16px;">
+  📨 There are <strong><%= openTickets %></strong> open ticket(s) currently active.
+</div>
+<% } %>
+
+<%- include('partials/footer') %>

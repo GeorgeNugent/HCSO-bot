@@ -1,0 +1,239 @@
+<%- include('partials/header') %>
+
+<div class="page-header">
+  <h2 class="page-title">⚡ Commands Panel</h2>
+  <p class="page-subtitle">Trigger bot commands from the dashboard</p>
+</div>
+
+<!-- Tab buttons -->
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="moderation">🔨 Moderation</button>
+  <button class="tab-btn"        data-tab="staffmgmt">🌴 Staff Mgmt</button>
+  <button class="tab-btn"        data-tab="cases">📋 Cases</button>
+  <button class="tab-btn"        data-tab="announce">📢 Announce</button>
+</div>
+
+<!-- ── MODERATION TAB ────────────────────────────────────────────────────── -->
+<div class="tab-panel active" id="tab-moderation">
+
+  <div class="cmd-grid">
+
+    <!-- Strike -->
+    <div class="cmd-card" id="cmd-moderation">
+      <h4 class="cmd-title">⚖️ Add Strike</h4>
+      <form class="cmd-form" data-endpoint="/api/commands/strike">
+        <label>Member</label>
+        <select name="userId" required>
+          <option value="">— Select member —</option>
+          <% members.forEach(m => { %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
+        </select>
+        <label>Reason</label>
+        <input type="text" name="reason" maxlength="512" placeholder="Reason for strike" required>
+        <button type="submit" class="btn btn-warn">Add Strike</button>
+      </form>
+    </div>
+
+    <!-- Strike Remove -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">✅ Remove Strike</h4>
+      <form class="cmd-form" data-endpoint="/api/commands/strike-remove">
+        <label>Member</label>
+        <select name="userId" required>
+          <option value="">— Select member —</option>
+          <% members.forEach(m => { %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
+        </select>
+        <label>Amount to remove</label>
+        <input type="number" name="amount" min="1" max="3" value="1" required>
+        <button type="submit" class="btn btn-success">Remove Strike</button>
+      </form>
+    </div>
+
+    <!-- Ban -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">🚫 Ban Member</h4>
+      <form class="cmd-form" data-endpoint="/api/commands/ban">
+        <label>Member</label>
+        <select name="userId" required>
+          <option value="">— Select member —</option>
+          <% members.forEach(m => { %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
+        </select>
+        <label>Reason</label>
+        <input type="text" name="reason" maxlength="512" placeholder="Reason for ban" required>
+        <button type="submit" class="btn btn-danger">Ban</button>
+      </form>
+    </div>
+
+    <!-- Kick -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">👢 Kick Member</h4>
+      <form class="cmd-form" data-endpoint="/api/commands/kick">
+        <label>Member</label>
+        <select name="userId" required>
+          <option value="">— Select member —</option>
+          <% members.forEach(m => { %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
+        </select>
+        <label>Reason</label>
+        <input type="text" name="reason" maxlength="512" placeholder="Reason for kick" required>
+        <button type="submit" class="btn btn-danger">Kick</button>
+      </form>
+    </div>
+
+    <!-- Timeout -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">⏳ Timeout Member</h4>
+      <form class="cmd-form" data-endpoint="/api/commands/timeout">
+        <label>Member</label>
+        <select name="userId" required>
+          <option value="">— Select member —</option>
+          <% members.forEach(m => { %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
+        </select>
+        <label>Duration (minutes)</label>
+        <input type="number" name="minutes" min="1" max="40320" value="60" required>
+        <label>Reason</label>
+        <input type="text" name="reason" maxlength="512" placeholder="Reason (optional)">
+        <button type="submit" class="btn btn-warn">Timeout</button>
+      </form>
+    </div>
+
+    <!-- Unban -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">🔓 Unban User</h4>
+      <form class="cmd-form" data-endpoint="/api/commands/unban">
+        <label>Discord User ID</label>
+        <input type="text" name="userId" pattern="\d{17,20}" placeholder="e.g. 123456789012345678" required>
+        <label>Reason</label>
+        <input type="text" name="reason" maxlength="512" placeholder="Reason for unban">
+        <button type="submit" class="btn btn-success">Unban</button>
+      </form>
+    </div>
+
+    <!-- Purge -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">🗑️ Purge Messages</h4>
+      <form class="cmd-form" data-endpoint="/api/commands/purge">
+        <label>Channel</label>
+        <select name="channelId" required>
+          <option value="">— Select channel —</option>
+          <% channels.forEach(c => { %><option value="<%= c.id %>">#<%= c.name %> (<%= c.parent %>)</option><% }); %>
+        </select>
+        <label>Amount (max 100)</label>
+        <input type="number" name="amount" min="1" max="100" value="10" required>
+        <button type="submit" class="btn btn-danger">Purge</button>
+      </form>
+    </div>
+
+  </div>
+</div><!-- /tab-moderation -->
+
+<!-- ── STAFF MGMT TAB ────────────────────────────────────────────────────── -->
+<div class="tab-panel" id="tab-staffmgmt">
+  <div class="cmd-grid">
+
+    <!-- Set LOA -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">🌴 Set LOA</h4>
+      <form class="cmd-form" data-endpoint="/api/commands/loa">
+        <label>Member</label>
+        <select name="userId" required>
+          <option value="">— Select member —</option>
+          <% members.forEach(m => { %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
+        </select>
+        <label>Start Date (MM-DD-YYYY)</label>
+        <input type="text" name="startDate" pattern="\d{2}-\d{2}-\d{4}" placeholder="e.g. 03-27-2026" required>
+        <label>End Date (MM-DD-YYYY)</label>
+        <input type="text" name="endDate"   pattern="\d{2}-\d{2}-\d{4}" placeholder="e.g. 04-10-2026" required>
+        <label>Reason (optional)</label>
+        <input type="text" name="reason" maxlength="256" placeholder="Reason for LOA">
+        <button type="submit" class="btn btn-info">Set LOA</button>
+      </form>
+    </div>
+
+    <!-- End LOA -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">✅ End LOA</h4>
+      <% if (usersOnLoa.length === 0) { %>
+        <p class="empty-state">No members are currently on LOA.</p>
+      <% } else { %>
+      <form class="cmd-form" data-endpoint="/api/commands/end-loa">
+        <label>Member on LOA</label>
+        <select name="userId" required>
+          <option value="">— Select member —</option>
+          <% usersOnLoa.forEach(u => { %><option value="<%= u.id %>"><%= u.name %></option><% }); %>
+        </select>
+        <button type="submit" class="btn btn-success">End LOA</button>
+      </form>
+      <% } %>
+    </div>
+
+  </div>
+</div><!-- /tab-staffmgmt -->
+
+<!-- ── CASES TAB ─────────────────────────────────────────────────────────── -->
+<div class="tab-panel" id="tab-cases">
+  <div class="cmd-grid">
+
+    <!-- Close case -->
+    <div class="cmd-card">
+      <h4 class="cmd-title">📁 Close Case</h4>
+      <% if (openCases.length === 0) { %>
+        <p class="empty-state">No open cases found.</p>
+      <% } else { %>
+      <form class="cmd-form" data-endpoint="/api/commands/case-close">
+        <label>Case</label>
+        <select name="caseId" required>
+          <option value="">— Select case —</option>
+          <% openCases.forEach(c => { %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %></option><% }); %>
+        </select>
+        <label>Closing reason (optional)</label>
+        <input type="text" name="reason" maxlength="512" placeholder="Reason for closing">
+        <button type="submit" class="btn btn-warn">Close Case</button>
+      </form>
+      <% } %>
+    </div>
+
+  </div>
+</div><!-- /tab-cases -->
+
+<!-- ── ANNOUNCE TAB ───────────────────────────────────────────────────────── -->
+<div class="tab-panel" id="tab-announce">
+  <div class="cmd-grid">
+
+    <div class="cmd-card" style="max-width:520px;">
+      <h4 class="cmd-title">📢 Post Announcement</h4>
+      <form class="cmd-form" data-endpoint="/api/commands/announce">
+        <label>Channel</label>
+        <select name="channelId" required>
+          <option value="">— Select channel —</option>
+          <% channels.forEach(c => { %><option value="<%= c.id %>">#<%= c.name %> (<%= c.parent %>)</option><% }); %>
+        </select>
+        <label>Title (optional)</label>
+        <input type="text" name="title" maxlength="256" placeholder="Announcement title">
+        <label>Message</label>
+        <textarea name="message" rows="5" maxlength="2000" placeholder="Write your announcement here..." required></textarea>
+        <button type="submit" class="btn btn-success">Post Announcement</button>
+      </form>
+    </div>
+
+  </div>
+</div><!-- /tab-announce -->
+
+<script>
+  // Tab switching
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+    });
+  });
+
+  // Handle anchor navigation (e.g., /commands#moderation)
+  const hash = location.hash.replace("#", "");
+  if (hash) {
+    const btn = document.querySelector(`.tab-btn[data-tab="${hash}"]`);
+    if (btn) btn.click();
+  }
+</script>
+
+<%- include('partials/footer') %>

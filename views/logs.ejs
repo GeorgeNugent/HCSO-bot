@@ -1,0 +1,63 @@
+<%- include('partials/header') %>
+
+<div class="page-header">
+  <h2 class="page-title">📋 Logs Viewer</h2>
+  <p class="page-subtitle">Viewing <strong><%= totalLogs %></strong> log entries</p>
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <span class="filter-label">Filter:</span>
+  <a href="/logs?type=all"       class="filter-chip <%= filter === 'all'       ? 'active' : '' %>">All</a>
+  <a href="/logs?type=strike"    class="filter-chip <%= filter === 'strike'    ? 'active' : '' %>">⚖️ Strikes</a>
+  <a href="/logs?type=patrol"    class="filter-chip <%= filter === 'patrol'    ? 'active' : '' %>">🚔 Patrols</a>
+  <a href="/logs?type=loa"       class="filter-chip <%= filter === 'loa'       ? 'active' : '' %>">🌴 LOA</a>
+  <a href="/logs?type=case"      class="filter-chip <%= filter === 'case'      ? 'active' : '' %>">📋 Cases</a>
+  <a href="/logs?type=blacklist" class="filter-chip <%= filter === 'blacklist' ? 'active' : '' %>">🚫 Blacklist</a>
+</div>
+
+<!-- Log table -->
+<div class="section-card" style="margin-top:16px;">
+  <% if (logs.length === 0) { %>
+    <p class="empty-state">No log entries found for this filter.</p>
+  <% } else { %>
+  <table class="log-table">
+    <thead>
+      <tr>
+        <th style="width:100px">Type</th>
+        <th>User ID</th>
+        <th>Description</th>
+        <th>Performed By</th>
+        <th style="width:160px">Timestamp</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% logs.forEach(log => { %>
+      <tr>
+        <td><span class="log-badge log-badge--<%= log.type %>"><%= log.icon %> <%= log.label %></span></td>
+        <td class="log-uid"><code><%= log.userId || '—' %></code></td>
+        <td class="log-desc"><%= log.description %></td>
+        <td class="log-uid"><code><%= log.performer || '—' %></code></td>
+        <td class="log-time">
+          <% if (log.timestamp > 0) { %>
+            <%= new Date(log.timestamp).toLocaleString() %>
+          <% } else { %>—<% } %>
+        </td>
+      </tr>
+      <% }); %>
+    </tbody>
+  </table>
+  <% } %>
+</div>
+
+<!-- Pagination -->
+<% if (totalPages > 1) { %>
+<div class="pagination">
+  <% for (let p = 1; p <= totalPages; p++) { %>
+    <a href="/logs?type=<%= filter %>&page=<%= p %>"
+       class="page-btn <%= currentPage === p ? 'active' : '' %>"><%= p %></a>
+  <% } %>
+</div>
+<% } %>
+
+<%- include('partials/footer') %>

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Access Denied — <%= botName %> Dashboard</title>
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body class="login-body">
+
+<div class="login-card">
+  <div style="font-size:64px;margin-bottom:16px;">🚫</div>
+  <h1 class="login-title">Access Denied</h1>
+  <p class="login-subtitle">You don't have permission to access this dashboard.</p>
+
+  <% if (user) { %>
+  <div class="alert alert-danger" style="margin:16px 0;text-align:left;">
+    <strong>Logged in as:</strong> <%= user.username %><br>
+    You are not a staff member on this Discord server.
+  </div>
+  <% } %>
+
+  <p class="login-note">
+    Only members with a staff role (Administrator, Management, Developer, Bot Staff, etc.) can access this panel.
+  </p>
+
+  <a href="/auth/logout" class="btn btn-outline" style="margin-top:12px;">Logout</a>
+</div>
+
+</body>
+</html>
