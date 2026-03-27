@@ -373,7 +373,17 @@
       </div>
     </div>
     <div class="cmd-card">
-      <div class="cmd-card-header"><span class="cmd-card-icon">🗑️</span><div class="cmd-card-title">Delete Case</div></div>
+      <div class="cmd-card-header"><span class="cmd-card-icon">�</span><div class="cmd-card-title">View Evidence</div></div>
+      <div class="cmd-card-body">
+        <div class="form-group"><label>Case</label>
+          <select class="form-control" id="dc-evview-id">
+            <% (deptCases||[]).forEach(function(c){ %><option value="<%= c.id %>"><%= c.id %> — <%= c.title %></option><% }); %>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="viewEvidence()">View Evidence</button>
+        <div id="dc-evview-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
+      </div>
+    </div>
       <div class="cmd-card-body">
         <div class="form-group"><label>Case</label>
           <select class="form-control" id="dc-del-id">
@@ -690,8 +700,43 @@
       }
     }
 
+    async function viewEvidence() {
+      var caseId = document.getElementById('dc-evview-id').value;
+      var el = document.getElementById('dc-evview-result');
+      el.style.display = 'none';
+      try {
+        var r = await fetch('/api/guild/'+DEPT_GUILD_ID+'/case-view', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({caseId:caseId}) });
+        var d = await r.json();
+        el.style.display = 'block';
+        if (!d.success || !d.case) {
+          el.style.color='#e74c3c'; el.style.background='rgba(231,76,60,.12)'; el.style.border='1px solid #e74c3c50';
+          el.textContent = d.error || 'Failed to load evidence.';
+          return;
+        }
+        var evidence = Array.isArray(d.case.evidence) ? d.case.evidence : [];
+        el.style.color='#eee'; el.style.background='rgba(78,168,222,.08)'; el.style.border='1px solid rgba(78,168,222,.3)';
+        if (evidence.length === 0) {
+          el.textContent = 'No evidence submitted for this case.';
+          return;
+        }
+        var html = '<strong style="color:#4ea8de">Evidence for ' + caseId + ' (' + evidence.length + ' item' + (evidence.length!==1?'s':'') + ')</strong>';
+        html += '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:8px">';
+        html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.15)"><th style="padding:4px 8px;text-align:left;color:#aaa">#</th><th style="padding:4px 8px;text-align:left;color:#aaa">Description</th><th style="padding:4px 8px;text-align:left;color:#aaa">Added At</th></tr>';
+        evidence.forEach(function(ev, i) {
+          html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.06)">'
+            + '<td style="padding:5px 8px;color:#aaa">' + (i+1) + '</td>'
+            + '<td style="padding:5px 8px;color:#eee;word-break:break-word">' + (ev.text||'—') + '</td>'
+            + '<td style="padding:5px 8px;color:#aaa;white-space:nowrap">' + (ev.addedAt ? new Date(ev.addedAt).toLocaleString() : '—') + '</td>'
+            + '</tr>';
+        });
+        html += '</table>';
+        el.innerHTML = html;
+      } catch(e) {
+        el.style.display='block'; el.style.color='#e74c3c'; el.textContent='Request failed: '+e.message;
+      }
+    }
+
     function deptCaseCreate() {
-      var joint = document.getElementById('dc-joint') && document.getElementById('dc-joint').checked;
       deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-create', {
         title:        document.getElementById('dc-title').value,
         incidentType: document.getElementById('dc-type').value,
