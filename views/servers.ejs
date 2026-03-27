@@ -55,7 +55,9 @@
           <tr>
             <td>
               <div style="display:flex;align-items:center;gap:10px;">
-                <% if (srv.icon) { %>
+                <% if (srv.logo) { %>
+                  <img src="<%= srv.logo %>" alt="" style="width:32px;height:32px;border-radius:50%;object-fit:contain;" onerror="this.style.display='none'">
+                <% } else if (srv.icon) { %>
                   <img src="<%= srv.icon %>" alt="" style="width:32px;height:32px;border-radius:50%;" onerror="this.style.display='none'">
                 <% } else { %>
                   <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;">🏘️</div>

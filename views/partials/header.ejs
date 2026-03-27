@@ -91,7 +91,11 @@
           <a href="/departments/<%= srv.id %>"
              class="nav-link <%= page === 'department' && typeof guildId !== 'undefined' && guildId === srv.id ? 'active' : '' %>"
              title="<%= srv.name %>">
-            <span class="nav-icon">🏛️</span>
+            <% if ((departments[srv.id] || {}).logo) { %>
+              <span class="nav-icon" style="display:flex;align-items:center;width:20px;height:20px;"><img src="<%= departments[srv.id].logo %>" alt="" style="width:20px;height:20px;border-radius:3px;object-fit:contain;" onerror="this.parentElement.textContent='🏛️'"></span>
+            <% } else { %>
+              <span class="nav-icon">🏛️</span>
+            <% } %>
             <span class="nav-label" style="font-size:12px;"><%= srv.shortName || srv.department %></span>
           </a>
         <% }); %>

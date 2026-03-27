@@ -99,7 +99,9 @@
       <% deptGuilds.forEach(function(dept) { %>
       <div class="dept-card" style="border-top: 3px solid <%= dept.color %>;">
         <div class="dept-card-header">
-          <% if (dept.icon) { %>
+          <% if (dept.logo) { %>
+            <img src="<%= dept.logo %>" alt="" class="dept-card-icon" onerror="this.style.display='none'">
+          <% } else if (dept.icon) { %>
             <img src="<%= dept.icon %>" alt="" class="dept-card-icon" onerror="this.style.display='none'">
           <% } else { %>
             <div class="dept-card-icon-fallback">🏛️</div>

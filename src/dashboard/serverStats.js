@@ -25,6 +25,7 @@ export function createServerStats(client) {
                 shortName:   dept ? dept.shortName : branding.fallback.shortName,
                 color:       dept ? dept.color  : branding.defaultColor,
                 footer:      dept ? dept.footer : branding.fallback.footer,
+                logo:        dept?.logo ?? null,
                 icon:        guild.iconURL({ size: 64 }) ?? null
             });
         }
@@ -53,6 +54,7 @@ export function createServerStats(client) {
             color:       dept ? dept.color  : branding.defaultColor,
             footer:      dept ? dept.footer : branding.fallback.footer,
             description: dept?.description ?? "",
+            logo:        dept?.logo ?? null,
             icon:        guild.iconURL({ size: 128 }) ?? null
         };
     }

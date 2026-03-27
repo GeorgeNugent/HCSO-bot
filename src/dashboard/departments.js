@@ -1,13 +1,13 @@
-﻿/**
+/**
  * Dashboard routes for multi-server / department pages.
- *   GET  /servers                         â€” all guilds the bot is in
- *   GET  /departments/:guildId            â€” per-department member management page
- *   POST /api/guild/:guildId/strike       â€” give a member a strike
- *   POST /api/guild/:guildId/strike-removeâ€” remove a strike
- *   POST /api/guild/:guildId/kick         â€” kick a member
- *   POST /api/guild/:guildId/ban          â€” ban a member
- *   POST /api/guild/:guildId/timeout      â€” timeout a member
- *   POST /api/guild/:guildId/unban        â€” unban a member
+ *   GET  /servers                         — all guilds the bot is in
+ *   GET  /departments/:guildId            — per-department member management page
+ *   POST /api/guild/:guildId/strike       — give a member a strike
+ *   POST /api/guild/:guildId/strike-remove— remove a strike
+ *   POST /api/guild/:guildId/kick         — kick a member
+ *   POST /api/guild/:guildId/ban          — ban a member
+ *   POST /api/guild/:guildId/timeout      — timeout a member
+ *   POST /api/guild/:guildId/unban        — unban a member
  */
 import { Router } from "express";
 import { getAllDepartments, getBranding } from "../embeds/departmentThemes.js";
@@ -22,7 +22,48 @@ import { getAllDepartments, getBranding } from "../embeds/departmentThemes.js";
 export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats, client, strikes, saveStrikes, getUserStrikeEntries, syncUserStrikeRoles, MAX_STRIKES, patrols, loa, casesData }) {
     const router = Router();
 
-    // â”€â”€ All servers / departments overview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── All servers / departments overview ────────────────────────────────────
+        // -- Joint Operations --
+    router.get("/departments/joint", requireStaff, segmentGuard("departments"), async (req, res) => {
+        try {
+            const departments = getAllDepartments();
+            const branding    = getBranding();
+
+            const deptGuilds = [];
+            for (const [guildId, guild] of client.guilds.cache) {
+                const dept = departments[guildId];
+                if (dept && dept.type === "main") continue;
+
+                try { await guild.members.fetch(); } catch {}
+
+                const strikeCount = Object.values(strikes[guildId] || {})
+                    .reduce((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0);
+
+                deptGuilds.push({
+                    id:          guildId,
+                    name:        guild.name,
+                    shortName:   dept ? dept.shortName : branding.fallback.shortName,
+                    icon:        guild.iconURL({ size: 64 }) ?? null,
+                    logo:        dept?.logo ?? null,
+                    color:       dept ? (dept.color || branding.defaultColor) : branding.defaultColor,
+                    memberCount: guild.memberCount,
+                    strikeCount,
+                    online:      true
+                });
+            }
+
+            const totalMembers = deptGuilds.reduce((s, g) => s + g.memberCount, 0);
+            const totalStrikes = deptGuilds.reduce((s, g) => s + g.strikeCount, 0);
+            const totalPatrols = patrols   ? Object.values(patrols).filter(p => p.active).length : 0;
+            const totalLOAs    = loa       ? Object.values(loa).filter(l => l.onLOA).length      : 0;
+            const openCases    = casesData ? Object.values(casesData.cases || {}).filter(c => c.status === "open").length : 0;
+
+            res.render("joint", { page: "joint", deptGuilds, totalMembers, totalStrikes, totalPatrols, totalLOAs, openCases, branding });
+        } catch (err) {
+            console.error("[Dept] /departments/joint error:", err.message);
+            res.render("error", { page: "error", message: "Could not load joint operations.", branding: getBranding() });
+        }
+    });
     router.get("/servers", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const servers      = await serverStats.getAllServers();
@@ -41,7 +82,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
         }
     });
 
-    // â”€â”€ Per-department member management page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Per-department member management page ─────────────────────────────────
     router.get("/departments/:guildId", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const { guildId } = req.params;
@@ -105,13 +146,13 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
         }
     });
 
-    // â”€â”€ Helper: resolve guild safely â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Helper: resolve guild safely ──────────────────────────────────────────
     async function getGuild(guildId) {
         return client.guilds.cache.get(guildId)
             ?? await client.guilds.fetch(guildId).catch(() => null);
     }
 
-    // â”€â”€ API: Strike â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── API: Strike ───────────────────────────────────────────────────────────
     router.post("/api/guild/:guildId/strike", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const { guildId } = req.params;
@@ -134,7 +175,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
         }
     });
 
-    // â”€â”€ API: Strike Remove â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── API: Strike Remove ────────────────────────────────────────────────────
     router.post("/api/guild/:guildId/strike-remove", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const { guildId } = req.params;
@@ -155,7 +196,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
         }
     });
 
-    // â”€â”€ API: Kick â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── API: Kick ─────────────────────────────────────────────────────────────
     router.post("/api/guild/:guildId/kick", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const { guildId } = req.params;
@@ -176,7 +217,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
         }
     });
 
-    // â”€â”€ API: Ban â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── API: Ban ──────────────────────────────────────────────────────────────
     router.post("/api/guild/:guildId/ban", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const { guildId } = req.params;
@@ -195,7 +236,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
         }
     });
 
-    // â”€â”€ API: Timeout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── API: Timeout ──────────────────────────────────────────────────────────
     router.post("/api/guild/:guildId/timeout", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const { guildId } = req.params;
@@ -217,7 +258,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
         }
     });
 
-    // â”€â”€ API: Unban â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── API: Unban ────────────────────────────────────────────────────────────
     router.post("/api/guild/:guildId/unban", requireStaff, segmentGuard("departments"), async (req, res) => {
         try {
             const { guildId } = req.params;
