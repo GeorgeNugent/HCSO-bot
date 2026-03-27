@@ -355,7 +355,7 @@
             <% (members||[]).forEach(function(m){ %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
           </select>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-assign',{caseId:document.getElementById('dc-assign-id').value,assignTo:document.getElementById('dc-assign-user').value},'dc-assign-result')">Assign</button>
+        <button class="btn btn-primary btn-sm" onclick="(function(){ var sel=document.getElementById('dc-assign-user'); deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-assign',{caseId:document.getElementById('dc-assign-id').value,assignTo:sel.value,assignToName:sel.options[sel.selectedIndex].text},'dc-assign-result'); })()">Assign</button>
         <div id="dc-assign-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
       </div>
     </div>
@@ -639,8 +639,18 @@
           if (d.case) {
             var c = d.case;
             var status = c.status || (c.closedAt ? 'Closed' : 'Open');
-            var assigned = c.assignedTo ? '<@' + c.assignedTo + '> (ID: ' + c.assignedTo + ')' : 'Unassigned';
             var evidence = Array.isArray(c.evidence) ? c.evidence.length : 0;
+            // Resolve assigned name from members dropdown if available
+            var assignedDisplay = 'Unassigned';
+            if (c.assignedTo) {
+              var assignSel = document.getElementById('dc-assign-user');
+              if (assignSel) {
+                for (var i = 0; i < assignSel.options.length; i++) {
+                  if (assignSel.options[i].value === c.assignedTo) { assignedDisplay = assignSel.options[i].text; break; }
+                }
+                if (assignedDisplay === 'Unassigned') assignedDisplay = c.assignedTo;
+              } else { assignedDisplay = c.assignedTo; }
+            }
             var rows = [
               ['ID', c.id || '—'],
               ['Title', c.title || '—'],
@@ -648,7 +658,7 @@
               ['Incident Type', c.incidentType || '—'],
               ['Location', c.location || '—'],
               ['Suspect', c.suspect || '—'],
-              ['Assigned To', c.assignedTo || 'Unassigned'],
+              ['Assigned To', assignedDisplay],
               ['Summary', c.summary || '—'],
               ['Evidence Items', evidence],
               ['Opened At', c.createdAt ? new Date(c.createdAt).toLocaleString() : '—'],

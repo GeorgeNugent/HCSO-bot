@@ -517,8 +517,9 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
             }
 
             c.assignedTo = assignTo;
+            const displayName = req.body.assignToName || assignTo;
             await saveCases();
-            res.json({ success: true, message: `Case ${key} assigned to ${assignTo}.` });
+            res.json({ success: true, message: `Case ${key} assigned to ${displayName}.` });
         } catch (err) {
             res.status(500).json({ error: err.message });
         }
