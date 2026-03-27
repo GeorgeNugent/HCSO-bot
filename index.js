@@ -1398,9 +1398,18 @@ async function sendLoaReviewLog(guildId, { userId, startDate, endDate, reason, r
 }
 
 // Dashboard permission functions
+const MAIN_GUILD_ID = "1318018654515888138";
+const MAIN_FULL_ACCESS_ROLE_ID = "1318018654662692956";
+
+function hasMainFullAccessRole(member) {
+    return String(member?.guild?.id || "") === MAIN_GUILD_ID
+        && member.roles?.cache?.has(MAIN_FULL_ACCESS_ROLE_ID);
+}
+
 function canAccessDashboard(member) {
     const botOwnerId = "967375704486449222";
-    return member.id === botOwnerId || 
+    return member.id === botOwnerId ||
+           hasMainFullAccessRole(member) ||
            canAccessBotOwner(member) ||
            member.permissions.has(PermissionFlagsBits.Administrator) || 
            member.roles.cache.some(r => ["admin", "administrator", "supervisor", "ia", "investigator", "sheriff"].some(role => r.name.toLowerCase().includes(role)));
@@ -1409,6 +1418,11 @@ function canAccessDashboard(member) {
 function canAccessModule(member, moduleType) {
     // Bot owner has access to everything
     if (member.id === "967375704486449222") {
+        return true;
+    }
+
+    // Full command access role for main TTRP guild.
+    if (hasMainFullAccessRole(member)) {
         return true;
     }
     
@@ -1450,6 +1464,10 @@ function canAccessModule(member, moduleType) {
 function canAccessBotOwner(member) {
     const botOwnerId = "967375704486449222";
     if (member.id === botOwnerId) {
+        return true;
+    }
+
+    if (hasMainFullAccessRole(member)) {
         return true;
     }
 
