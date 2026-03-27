@@ -55,46 +55,49 @@
         </a>
       <% } %>
 
-      <div class="sidebar-section-label" style="margin-top:8px;">Staff</div>
-      <% if (!segmentAccess || segmentAccess.status) { %>
-        <a href="/status"   class="nav-link <%= page === 'status'     ? 'active' : '' %>">
-          <span class="nav-icon">📊</span><span class="nav-label">Bot Status</span>
-        </a>
-      <% } %>
-      <% if (!segmentAccess || segmentAccess.commands) { %>
-        <a href="/commands" class="nav-link <%= page === 'commands'   ? 'active' : '' %>">
-          <span class="nav-icon">⚡</span><span class="nav-label">Commands</span>
-        </a>
-      <% } %>
-      <% if (!segmentAccess || segmentAccess.logs) { %>
-        <a href="/logs"     class="nav-link <%= page === 'logs'       ? 'active' : '' %>">
-          <span class="nav-icon">📋</span><span class="nav-label">Logs</span>
-        </a>
-      <% } %>
-      <% var _mainServersForStaff = (typeof servers !== 'undefined' ? servers : []).filter(function(s){
-           return (departments[s.id] || {}).type === 'main';
-         }); %>
-      <% _mainServersForStaff.forEach(function(srv) { %>
-        <a href="/departments/<%= srv.id %>"
-           class="nav-link <%= page === 'department' && typeof guildId !== 'undefined' && guildId === srv.id ? 'active' : '' %>"
-           title="<%= srv.name %>">
-          <span class="nav-icon">🏛️</span><span class="nav-label">Twin Palms Staff</span>
-        </a>
-      <% }); %>
-      <% if (!segmentAccess || segmentAccess.applications) { %>
-        <a href="/applications" class="nav-link <%= page === 'applications' ? 'active' : '' %>">
-          <span class="nav-icon">📝</span><span class="nav-label">Applications</span>
-        </a>
-      <% } %>
-      <% if (!segmentAccess || segmentAccess.settings) { %>
-        <a href="/settings" class="nav-link <%= page === 'settings'   ? 'active' : '' %>">
-          <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
-        </a>
-      <% } %>
-      <% if (isBotOwner) { %>
-        <a href="/bot-owner" class="nav-link <%= page === 'bot-owner' ? 'active' : '' %>">
-          <span class="nav-icon">👑</span><span class="nav-label">Bot Owner</span>
-        </a>
+      <% var canSeeStaffSection = (!segmentAccess || segmentAccess.settings); %>
+      <% if (canSeeStaffSection) { %>
+        <div class="sidebar-section-label" style="margin-top:8px;">Staff</div>
+        <% if (!segmentAccess || segmentAccess.status) { %>
+          <a href="/status"   class="nav-link <%= page === 'status'     ? 'active' : '' %>">
+            <span class="nav-icon">📊</span><span class="nav-label">Bot Status</span>
+          </a>
+        <% } %>
+        <% if (!segmentAccess || segmentAccess.commands) { %>
+          <a href="/commands" class="nav-link <%= page === 'commands'   ? 'active' : '' %>">
+            <span class="nav-icon">⚡</span><span class="nav-label">Commands</span>
+          </a>
+        <% } %>
+        <% if (!segmentAccess || segmentAccess.logs) { %>
+          <a href="/logs"     class="nav-link <%= page === 'logs'       ? 'active' : '' %>">
+            <span class="nav-icon">📋</span><span class="nav-label">Logs</span>
+          </a>
+        <% } %>
+        <% var _mainServersForStaff = (typeof servers !== 'undefined' ? servers : []).filter(function(s){
+             return (departments[s.id] || {}).type === 'main';
+           }); %>
+        <% _mainServersForStaff.forEach(function(srv) { %>
+          <a href="/departments/<%= srv.id %>"
+             class="nav-link <%= page === 'department' && typeof guildId !== 'undefined' && guildId === srv.id ? 'active' : '' %>"
+             title="<%= srv.name %>">
+            <span class="nav-icon">🏛️</span><span class="nav-label">Twin Palms Staff</span>
+          </a>
+        <% }); %>
+        <% if (!segmentAccess || segmentAccess.applications) { %>
+          <a href="/applications" class="nav-link <%= page === 'applications' ? 'active' : '' %>">
+            <span class="nav-icon">📝</span><span class="nav-label">Applications</span>
+          </a>
+        <% } %>
+        <% if (!segmentAccess || segmentAccess.settings) { %>
+          <a href="/settings" class="nav-link <%= page === 'settings'   ? 'active' : '' %>">
+            <span class="nav-icon">⚙️</span><span class="nav-label">Settings</span>
+          </a>
+        <% } %>
+        <% if (isBotOwner) { %>
+          <a href="/bot-owner" class="nav-link <%= page === 'bot-owner' ? 'active' : '' %>">
+            <span class="nav-icon">👑</span><span class="nav-label">Bot Owner</span>
+          </a>
+        <% } %>
       <% } %>
 
       <% if (!segmentAccess || segmentAccess.departments) { %>
