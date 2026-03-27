@@ -79,6 +79,67 @@ const casesData = readJsonData("cases.json", { cases: {} });
 const reports = readJsonData("reports.json", {});
 let tickets = readJsonData("tickets.json", { tickets: {} });
 
+function isCaseClosed(entry) {
+    if (!entry) return false;
+    if (typeof entry.closed === "boolean") return entry.closed;
+    return String(entry.status || "").trim().toLowerCase() === "closed";
+}
+
+function ensureCaseCounter() {
+    const current = Number(casesData.caseCounter) || 0;
+    const discoveredMax = Object.keys(casesData.cases || {}).reduce((max, id) => {
+        const match = /^CASE-(\d+)$/i.exec(String(id).trim());
+        return match ? Math.max(max, Number(match[1]) || 0) : max;
+    }, 0);
+    casesData.caseCounter = Math.max(current, discoveredMax);
+}
+
+function sanitizeCasesData() {
+    if (!casesData.cases || typeof casesData.cases !== "object" || Array.isArray(casesData.cases)) {
+        casesData.cases = {};
+        casesData.caseCounter = Number(casesData.caseCounter) || 0;
+        return true;
+    }
+
+    let changed = false;
+    for (const [key, entry] of Object.entries(casesData.cases)) {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+            delete casesData.cases[key];
+            changed = true;
+            continue;
+        }
+
+        const storedId = String(entry.caseId || "").trim();
+        const hasNaNId = /nan/i.test(String(key)) || /nan/i.test(storedId);
+        if (hasNaNId && !isCaseClosed(entry)) {
+            delete casesData.cases[key];
+            changed = true;
+            continue;
+        }
+
+        const normalizedKey = String(key).trim();
+        if (!storedId || (/^CASE-\d+$/i.test(normalizedKey) && storedId !== normalizedKey)) {
+            entry.caseId = normalizedKey;
+            changed = true;
+        }
+
+        const closed = isCaseClosed(entry);
+        if (entry.closed !== closed) {
+            entry.closed = closed;
+            changed = true;
+        }
+
+        const normalizedStatus = closed ? "Closed" : "Open";
+        if (entry.status !== normalizedStatus) {
+            entry.status = normalizedStatus;
+            changed = true;
+        }
+    }
+
+    ensureCaseCounter();
+    return changed;
+}
+
 if (tickets.tickets) {
     Object.values(tickets.tickets).forEach(ticket => {
         if (!Object.prototype.hasOwnProperty.call(ticket, "userRemoved")) {
@@ -168,6 +229,11 @@ function saveCommendations() {
 
 function saveConfig() {
     writeJsonData("config.json", config);
+}
+
+if (sanitizeCasesData()) {
+    saveCases();
+    console.log("[Startup] Cases data sanitized.");
 }
 
 function save() {
@@ -1992,7 +2058,11 @@ client.on("interactionCreate", async interaction => {
         if (focusedOption.name === "case-id") {
             const query = focusedOption.value.toUpperCase();
             const commandName = interaction.commandName;
-            const allCases = Object.values(casesData.cases);
+            const allCases = Object.entries(casesData.cases || {}).map(([id, entry]) => ({
+                caseId: String(entry?.caseId || id),
+                title: String(entry?.title || id),
+                status: isCaseClosed(entry) ? "Closed" : "Open"
+            }));
             
             // For reopen: show only closed cases
             // For other commands: show all cases
@@ -4321,6 +4391,7 @@ client.on("interactionCreate", async interaction => {
         const createdBy = interaction.user;
 
         // Generate case ID
+        ensureCaseCounter();
         casesData.caseCounter++;
         const caseId = `CASE-${String(casesData.caseCounter).padStart(6, '0')}`;
 
@@ -4335,6 +4406,7 @@ client.on("interactionCreate", async interaction => {
             assignedTo: null,
             evidence: [],
             status: "Open",
+            closed: false,
             createdAt: new Date().toISOString()
         };
         saveCases();
@@ -4585,6 +4657,7 @@ client.on("interactionCreate", async interaction => {
         }
 
         casesData.cases[caseId].status = "Closed";
+        casesData.cases[caseId].closed = true;
         casesData.cases[caseId].closedBy = interaction.user.id;
         casesData.cases[caseId].closedReason = reason;
         casesData.cases[caseId].closedAt = new Date().toISOString();
@@ -4644,6 +4717,7 @@ client.on("interactionCreate", async interaction => {
         }
 
         casesData.cases[caseId].status = "Open";
+        casesData.cases[caseId].closed = false;
         casesData.cases[caseId].reopenedBy = interaction.user.id;
         casesData.cases[caseId].reopenReason = reason;
         casesData.cases[caseId].reopenedAt = new Date().toISOString();

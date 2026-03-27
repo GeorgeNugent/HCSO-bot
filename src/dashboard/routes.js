@@ -148,7 +148,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         const activePatrols = Object.values(patrols).filter(p => p.active).length;
         const activeLoas    = Object.values(loa).filter(l => l.onLOA).length;
         const openCases     = Object.values(casesData.cases || {})
-            .filter(c => (c.status ? c.status !== "closed" : !c.closed)).length;
+            .filter(c => !isCaseClosed(c)).length;
         const openTickets   = Object.values(tickets.tickets || {}).filter(t => t.status === "open").length;
 
         res.render("home", {

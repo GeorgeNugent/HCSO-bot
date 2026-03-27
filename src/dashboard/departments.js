@@ -86,7 +86,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
             const totalPatrols = patrols   ? Object.values(patrols).filter(p => p.active).length : 0;
             const totalLOAs    = loa       ? Object.values(loa).filter(l => l.onLOA).length      : 0;
             const openCases    = casesData
-                ? Object.values(casesData.cases || {}).filter(c => (c.status ? c.status !== "closed" : !c.closed)).length
+                ? Object.values(casesData.cases || {}).filter(c => String(c.status || "").trim().toLowerCase() !== "closed" && c.closed !== true).length
                 : 0;
 
             res.render("joint", { page: "joint", deptGuilds, totalMembers, totalStrikes, totalPatrols, totalLOAs, openCases, branding });
@@ -191,7 +191,7 @@ export function createDepartmentRoutes({ requireStaff, segmentGuard, serverStats
                     .slice(0, 200)
                     .map(([id, c]) => ({ id, title: c.title || id, status: c.status || "Open", createdAt: c.createdAt, department: c.department }))
                 : [];
-            const deptOpenCases = deptCases.filter(c => c.status !== "Closed");
+            const deptOpenCases = deptCases.filter(c => String(c.status || "").trim().toLowerCase() !== "closed");
 
             // Members of this guild who are on LOA
             const guildMemberIds = new Set(members.map(m => m.id));
