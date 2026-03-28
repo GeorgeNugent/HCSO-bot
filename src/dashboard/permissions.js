@@ -8,6 +8,9 @@ export function createPermissions({ hasStaffAccess } = {}) {
 
     function requireAuth(req, res, next) {
         if (!req.session.user) {
+            if (req.path.startsWith("/api/")) {
+                return res.status(401).json({ error: "Authentication required" });
+            }
             req.session.returnTo = req.originalUrl;
             return res.redirect("/auth/discord");
         }
@@ -16,6 +19,9 @@ export function createPermissions({ hasStaffAccess } = {}) {
 
     async function requireStaff(req, res, next) {
         if (!req.session.user) {
+            if (req.path.startsWith("/api/")) {
+                return res.status(401).json({ error: "Authentication required" });
+            }
             req.session.returnTo = req.originalUrl;
             return res.redirect("/auth/discord");
         }

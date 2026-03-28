@@ -297,6 +297,12 @@
 
 <!-- ─── Cases tab panel ──────────────────────────────────────────────────── -->
 <div id="dtab-cases" class="tab-panel">
+  <% if (caseCreated) { %>
+    <div class="alert alert-success" style="margin-bottom:12px;">✅ Case <strong><%= caseCreated %></strong> created successfully.</div>
+  <% } %>
+  <% if (caseError) { %>
+    <div class="alert alert-danger" style="margin-bottom:12px;">❌ <%= caseError %></div>
+  <% } %>
   <% if ((deptCases||[]).length === 0) { %>
     <p style="color:var(--text-muted);padding:8px 0;">No cases for this department yet. Create one below.</p>
   <% } %>
@@ -304,16 +310,18 @@
     <div class="cmd-card">
       <div class="cmd-card-header"><span class="cmd-card-icon">🆕</span><div class="cmd-card-title">Create Case</div></div>
       <div class="cmd-card-body">
-        <div class="form-group"><label>Title</label><input class="form-control" id="dc-title" placeholder="Case title…"></div>
-        <div class="form-group"><label>Incident Type</label><input class="form-control" id="dc-type" placeholder="e.g. Traffic Stop"></div>
-        <div class="form-group"><label>Location</label><input class="form-control" id="dc-loc" placeholder="Location…"></div>
-        <div class="form-group"><label>Suspect (optional)</label><input class="form-control" id="dc-suspect" placeholder="Unknown"></div>
-        <div class="form-group"><label>Summary</label><textarea class="form-control" id="dc-summary" rows="3" placeholder="Brief summary…"></textarea></div>
-        <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-          <input type="checkbox" id="dc-joint" style="width:auto;margin:0;">
-          <label for="dc-joint" style="margin:0;color:var(--text);cursor:pointer;">🤝 Joint Ops — visible to all departments</label>
-        </div>
-        <button class="btn btn-primary btn-sm" onclick="deptCaseCreate()">Create</button>
+        <form method="POST" action="/departments/<%= guildId %>/case-create" novalidate>
+          <div class="form-group"><label>Title</label><input class="form-control" id="dc-title" name="title" placeholder="Case title…" required></div>
+          <div class="form-group"><label>Incident Type</label><input class="form-control" id="dc-type" name="incidentType" placeholder="e.g. Traffic Stop" required></div>
+          <div class="form-group"><label>Location</label><input class="form-control" id="dc-loc" name="location" placeholder="Location…" required></div>
+          <div class="form-group"><label>Suspect (optional)</label><input class="form-control" id="dc-suspect" name="suspect" placeholder="Unknown"></div>
+          <div class="form-group"><label>Summary</label><textarea class="form-control" id="dc-summary" name="summary" rows="3" placeholder="Brief summary…" required></textarea></div>
+          <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+            <input type="checkbox" id="dc-joint" name="jointOps" value="true" style="width:auto;margin:0;">
+            <label for="dc-joint" style="margin:0;color:var(--text);cursor:pointer;">🤝 Joint Ops — visible to all departments</label>
+          </div>
+          <button type="submit" id="dc-create-btn" class="btn btn-primary btn-sm">Create</button>
+        </form>
         <div id="dc-result" style="display:none;margin-top:10px;padding:8px;border-radius:6px;"></div>
       </div>
     </div>
@@ -739,14 +747,69 @@
     }
 
     function deptCaseCreate() {
-      deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-create', {
-        title:        document.getElementById('dc-title').value,
-        incidentType: document.getElementById('dc-type').value,
-        location:     document.getElementById('dc-loc').value,
-        suspect:      document.getElementById('dc-suspect').value,
-        summary:      document.getElementById('dc-summary').value,
-        jointOps:     joint ? 'true' : 'false'
-      }, 'dc-result');
+      var resultEl = document.getElementById('dc-result');
+      try {
+        var titleEl = document.getElementById('dc-title');
+        var typeEl = document.getElementById('dc-type');
+        var locEl = document.getElementById('dc-loc');
+        var suspectEl = document.getElementById('dc-suspect');
+        var summaryEl = document.getElementById('dc-summary');
+        var jointEl = document.getElementById('dc-joint');
+
+        if (!titleEl || !typeEl || !locEl || !summaryEl) {
+          if (resultEl) {
+            resultEl.style.display = 'block';
+            resultEl.style.color = '#e74c3c';
+            resultEl.style.background = 'rgba(231,76,60,.12)';
+            resultEl.style.border = '1px solid #e74c3c50';
+            resultEl.textContent = 'Create form is missing required fields on the page.';
+          }
+          return;
+        }
+
+        var title = titleEl.value.trim();
+        var incidentType = typeEl.value.trim();
+        var location = locEl.value.trim();
+        var suspect = suspectEl ? suspectEl.value.trim() : '';
+        var summary = summaryEl.value.trim();
+        var joint = !!(jointEl && jointEl.checked);
+
+        if (resultEl) {
+          resultEl.style.display = 'block';
+          resultEl.style.color = '#4ea8de';
+          resultEl.style.background = 'rgba(78,168,222,.12)';
+          resultEl.style.border = '1px solid rgba(78,168,222,.35)';
+          resultEl.textContent = 'Submitting case...';
+        }
+
+        if (!title || !incidentType || !location || !summary) {
+          if (resultEl) {
+            resultEl.style.display = 'block';
+            resultEl.style.color = '#e74c3c';
+            resultEl.style.background = 'rgba(231,76,60,.12)';
+            resultEl.style.border = '1px solid #e74c3c50';
+            resultEl.textContent = 'Title, incident type, location, and summary are required.';
+          }
+          return;
+        }
+
+        deptCaseAction('/api/guild/'+DEPT_GUILD_ID+'/case-create', {
+          title: title,
+          incidentType: incidentType,
+          location: location,
+          suspect: suspect,
+          summary: summary,
+          jointOps: joint ? 'true' : 'false'
+        }, 'dc-result');
+      } catch (e) {
+        if (resultEl) {
+          resultEl.style.display = 'block';
+          resultEl.style.color = '#e74c3c';
+          resultEl.style.background = 'rgba(231,76,60,.12)';
+          resultEl.style.border = '1px solid #e74c3c50';
+          resultEl.textContent = 'Create failed before request: ' + e.message;
+        }
+      }
     }
 
     function deptLOAAction() {
@@ -846,6 +909,15 @@
         }
       });
     });
+
+    // Secondary binding so create still works even if inline onclick is blocked.
+    (function bindDepartmentCreateButton(){
+      var createBtn = document.getElementById('dc-create-btn');
+      if (!createBtn) return;
+      createBtn.addEventListener('click', function(){
+        deptCaseCreate();
+      });
+    })();
 
 </script>
 

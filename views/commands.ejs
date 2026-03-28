@@ -16,16 +16,25 @@
 <!-- ── MODERATION TAB ────────────────────────────────────────────────────── -->
 <div class="tab-panel active" id="tab-moderation">
 
+  <div class="cmd-card" style="margin-bottom: 16px; max-width: 520px;">
+    <h4 class="cmd-title">🛰️ Moderation Server</h4>
+    <label for="moderation-server">Target Server</label>
+    <select id="moderation-server" required>
+      <option value="">— Select server —</option>
+      <% servers.forEach(s => { %><option value="<%= s.id %>"><%= s.name %> (<%= s.shortName %>)</option><% }); %>
+    </select>
+  </div>
+
   <div class="cmd-grid">
 
     <!-- Strike -->
     <div class="cmd-card" id="cmd-moderation">
       <h4 class="cmd-title">⚖️ Add Strike</h4>
       <form class="cmd-form" data-endpoint="/api/commands/strike">
+        <input type="hidden" name="serverId" class="moderation-server-id" required>
         <label>Member</label>
-        <select name="userId" required>
+        <select name="userId" data-server-member-select required>
           <option value="">— Select member —</option>
-          <% members.forEach(m => { %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
         </select>
         <label>Reason</label>
         <input type="text" name="reason" maxlength="512" placeholder="Reason for strike" required>
@@ -37,10 +46,10 @@
     <div class="cmd-card">
       <h4 class="cmd-title">✅ Remove Strike</h4>
       <form class="cmd-form" data-endpoint="/api/commands/strike-remove">
+        <input type="hidden" name="serverId" class="moderation-server-id" required>
         <label>Member</label>
-        <select name="userId" required>
+        <select name="userId" data-server-member-select required>
           <option value="">— Select member —</option>
-          <% members.forEach(m => { %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
         </select>
         <label>Amount to remove</label>
         <input type="number" name="amount" min="1" max="3" value="1" required>
@@ -52,10 +61,10 @@
     <div class="cmd-card">
       <h4 class="cmd-title">🚫 Ban Member</h4>
       <form class="cmd-form" data-endpoint="/api/commands/ban">
+        <input type="hidden" name="serverId" class="moderation-server-id" required>
         <label>Member</label>
-        <select name="userId" required>
+        <select name="userId" data-server-member-select required>
           <option value="">— Select member —</option>
-          <% members.forEach(m => { %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
         </select>
         <label>Reason</label>
         <input type="text" name="reason" maxlength="512" placeholder="Reason for ban" required>
@@ -67,10 +76,10 @@
     <div class="cmd-card">
       <h4 class="cmd-title">👢 Kick Member</h4>
       <form class="cmd-form" data-endpoint="/api/commands/kick">
+        <input type="hidden" name="serverId" class="moderation-server-id" required>
         <label>Member</label>
-        <select name="userId" required>
+        <select name="userId" data-server-member-select required>
           <option value="">— Select member —</option>
-          <% members.forEach(m => { %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
         </select>
         <label>Reason</label>
         <input type="text" name="reason" maxlength="512" placeholder="Reason for kick" required>
@@ -82,10 +91,10 @@
     <div class="cmd-card">
       <h4 class="cmd-title">⏳ Timeout Member</h4>
       <form class="cmd-form" data-endpoint="/api/commands/timeout">
+        <input type="hidden" name="serverId" class="moderation-server-id" required>
         <label>Member</label>
-        <select name="userId" required>
+        <select name="userId" data-server-member-select required>
           <option value="">— Select member —</option>
-          <% members.forEach(m => { %><option value="<%= m.id %>"><%= m.name %></option><% }); %>
         </select>
         <label>Duration (minutes)</label>
         <input type="number" name="minutes" min="1" max="40320" value="60" required>
@@ -99,6 +108,7 @@
     <div class="cmd-card">
       <h4 class="cmd-title">🔓 Unban User</h4>
       <form class="cmd-form" data-endpoint="/api/commands/unban">
+        <input type="hidden" name="serverId" class="moderation-server-id" required>
         <label>Discord User ID</label>
         <input type="text" name="userId" pattern="\d{17,20}" placeholder="e.g. 123456789012345678" required>
         <label>Reason</label>
@@ -111,10 +121,10 @@
     <div class="cmd-card">
       <h4 class="cmd-title">🗑️ Purge Messages</h4>
       <form class="cmd-form" data-endpoint="/api/commands/purge">
+        <input type="hidden" name="serverId" class="moderation-server-id" required>
         <label>Channel</label>
-        <select name="channelId" required>
+        <select name="channelId" data-server-channel-select required>
           <option value="">— Select channel —</option>
-          <% channels.forEach(c => { %><option value="<%= c.id %>">#<%= c.name %> (<%= c.parent %>)</option><% }); %>
         </select>
         <label>Amount (max 100)</label>
         <input type="number" name="amount" min="1" max="100" value="10" required>
@@ -397,23 +407,79 @@
 </div><!-- /tab-announce -->
 
 <script>
-  // Announcement server/channel filtering
+  // Command panel server data
+  const membersByServer = <%- JSON.stringify(membersByServer) %>;
   const channelsByServer = <%- JSON.stringify(channelsByServer) %>;
+
+  // Moderation server/member/channel filtering
+  const moderationServerSelect = document.getElementById("moderation-server");
+  const moderationMemberSelects = document.querySelectorAll("[data-server-member-select]");
+  const moderationChannelSelects = document.querySelectorAll("[data-server-channel-select]");
+  const moderationServerInputs = document.querySelectorAll(".moderation-server-id");
+
+  function updateModerationServer(serverId) {
+    const selectedServerId = String(serverId || "");
+
+    moderationServerInputs.forEach(input => {
+      input.value = selectedServerId;
+    });
+
+    moderationMemberSelects.forEach(select => {
+      const previous = select.value;
+      const members = membersByServer[selectedServerId] || [];
+      select.innerHTML = '<option value="">— Select member —</option>';
+      members.forEach(member => {
+        const option = document.createElement("option");
+        option.value = member.id;
+        option.textContent = member.name;
+        select.appendChild(option);
+      });
+      if (previous && members.some(member => member.id === previous)) select.value = previous;
+    });
+
+    moderationChannelSelects.forEach(select => {
+      const previous = select.value;
+      const channels = channelsByServer[selectedServerId] || [];
+      select.innerHTML = '<option value="">— Select channel —</option>';
+      channels.forEach(channel => {
+        const option = document.createElement("option");
+        option.value = channel.id;
+        option.textContent = `#${channel.name} (${channel.parent})`;
+        select.appendChild(option);
+      });
+      if (previous && channels.some(channel => channel.id === previous)) select.value = previous;
+    });
+  }
+
+  if (moderationServerSelect) {
+    moderationServerSelect.addEventListener("change", (e) => {
+      updateModerationServer(e.target.value);
+    });
+
+    const initialServerId = moderationServerSelect.value
+      || moderationServerSelect.options[1]?.value
+      || "";
+
+    if (initialServerId) moderationServerSelect.value = initialServerId;
+    updateModerationServer(initialServerId);
+  }
+
+  // Announcement server/channel filtering
   
-  const serverSelect = document.getElementById("announce-server");
-  const channelSelect = document.getElementById("announce-channel");
+  const announceServerSelect = document.getElementById("announce-server");
+  const announceChannelSelect = document.getElementById("announce-channel");
   
-  if (serverSelect && channelSelect) {
-    serverSelect.addEventListener("change", (e) => {
+  if (announceServerSelect && announceChannelSelect) {
+    announceServerSelect.addEventListener("change", (e) => {
       const selectedServerId = e.target.value;
-      channelSelect.innerHTML = '<option value="">— Select channel —</option>';
+      announceChannelSelect.innerHTML = '<option value="">— Select channel —</option>';
       
       if (selectedServerId && channelsByServer[selectedServerId]) {
         channelsByServer[selectedServerId].forEach(channel => {
           const option = document.createElement("option");
           option.value = channel.id;
           option.textContent = `#${channel.name} (${channel.parent})`;
-          channelSelect.appendChild(option);
+          announceChannelSelect.appendChild(option);
         });
       }
     });

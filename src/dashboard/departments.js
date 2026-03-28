@@ -311,7 +311,9 @@ export function createDepartmentRoutes({ requireAuth, requireStaff, segmentGuard
                 usersOnLoa,
                 deptStrikeLogs,
                 isHcsoDepartment: isLawEnforcementDepartment,
-                canManageEndLoa
+                canManageEndLoa,
+                caseCreated: String(req.query?.caseCreated || ""),
+                caseError: String(req.query?.caseError || "")
             });
         } catch (err) {
             console.error("[Dept] /departments/:guildId error:", err.message);
@@ -369,6 +371,43 @@ export function createDepartmentRoutes({ requireAuth, requireStaff, segmentGuard
         }
 
         return false;
+    }
+
+    async function createDepartmentCase({ guildId, userId, payload }) {
+        const title = String(payload?.title || "").trim();
+        const incidentType = String(payload?.incidentType || "").trim();
+        const location = String(payload?.location || "").trim();
+        const suspect = String(payload?.suspect || "").trim();
+        const summary = String(payload?.summary || "").trim();
+        const jointOps = payload?.jointOps;
+
+        if (!title) {
+            return { ok: false, status: 400, error: "Title is required" };
+        }
+        if (!casesData) {
+            return { ok: false, status: 503, error: "Cases not available" };
+        }
+
+        ensureCaseCounter();
+        casesData.caseCounter = (casesData.caseCounter || 0) + 1;
+        const id  = `CASE-${String(casesData.caseCounter).padStart(6, "0")}`;
+        const isJoint = jointOps === "true" || jointOps === true || jointOps === "on";
+
+        casesData.cases[id] = {
+            title,
+            incidentType,
+            location,
+            suspect,
+            summary,
+            status:       "Open",
+            department:   isJoint ? "joint" : guildId,
+            createdAt:    new Date().toISOString(),
+            createdBy:    userId,
+            evidence:     [],
+            notes:        []
+        };
+        await saveCases();
+        return { ok: true, caseId: id };
     }
 
     async function requireDepartmentAccess(req, res, next) {
@@ -603,32 +642,41 @@ export function createDepartmentRoutes({ requireAuth, requireStaff, segmentGuard
     router.post("/api/guild/:guildId/case-create", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
         try {
             const { guildId } = req.params;
-            const { title, incidentType, location, suspect, summary, jointOps } = req.body;
-            if (!title) return res.status(400).json({ error: "Title is required" });
-            if (!casesData) return res.status(503).json({ error: "Cases not available" });
+            const result = await createDepartmentCase({
+                guildId,
+                userId: req.session.user.id,
+                payload: req.body
+            });
+            if (!result.ok) {
+                return res.status(result.status).json({ error: result.error });
+            }
 
-            ensureCaseCounter();
-            casesData.caseCounter = (casesData.caseCounter || 0) + 1;
-            const id  = `CASE-${String(casesData.caseCounter).padStart(6, "0")}`;
-            const isJoint = jointOps === "true" || jointOps === true;
-
-            casesData.cases[id] = {
-                title,
-                incidentType: incidentType || "",
-                location:     location     || "",
-                suspect:      suspect      || "",
-                summary:      summary      || "",
-                status:       "Open",
-                department:   isJoint ? "joint" : guildId,
-                createdAt:    new Date().toISOString(),
-                createdBy:    req.session.user.id,
-                evidence:     [],
-                notes:        []
-            };
-            await saveCases();
-            res.json({ success: true, message: `Case ${id} created.`, caseId: id });
+            res.json({ success: true, message: `Case ${result.caseId} created.`, caseId: result.caseId });
         } catch (err) {
             res.status(500).json({ error: err.message });
+        }
+    });
+
+    // ── Department form fallback: Case Create ───────────────────────────────
+    router.post("/departments/:guildId/case-create", requireAuth, segmentGuard("departments"), requireDepartmentAccess, async (req, res) => {
+        try {
+            const { guildId } = req.params;
+            const result = await createDepartmentCase({
+                guildId,
+                userId: req.session.user.id,
+                payload: req.body
+            });
+
+            if (!result.ok) {
+                const msg = encodeURIComponent(result.error || "Failed to create case");
+                return res.redirect(`/departments/${guildId}?caseError=${msg}#dtab-cases`);
+            }
+
+            const created = encodeURIComponent(result.caseId);
+            return res.redirect(`/departments/${guildId}?caseCreated=${created}#dtab-cases`);
+        } catch (err) {
+            const msg = encodeURIComponent(err.message || "Failed to create case");
+            return res.redirect(`/departments/${req.params.guildId}?caseError=${msg}#dtab-cases`);
         }
     });
 

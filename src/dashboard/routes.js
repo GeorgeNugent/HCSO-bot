@@ -106,6 +106,47 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         }
     }
 
+    function getCommandEligibleServerIds() {
+        const departments = getAllDepartments();
+        const ids = new Set();
+
+        for (const guildId of Object.keys(departments || {})) {
+            const normalized = String(guildId || "").trim();
+            if (/^\d{17,20}$/.test(normalized)) ids.add(normalized);
+        }
+
+        const defaultGuildId = String(GUILD_ID || "").trim();
+        if (/^\d{17,20}$/.test(defaultGuildId)) ids.add(defaultGuildId);
+
+        return [...ids];
+    }
+
+    async function resolveCommandGuild(serverIdRaw) {
+        const fallbackGuildId = String(GUILD_ID || "").trim();
+        const serverId = String(serverIdRaw || fallbackGuildId).trim();
+
+        if (!serverId) {
+            return { error: "No target server selected", status: 400 };
+        }
+
+        const eligibleServerIds = getCommandEligibleServerIds();
+        if (eligibleServerIds.length === 0) {
+            return { error: "No configured command servers available", status: 500 };
+        }
+
+        if (!eligibleServerIds.includes(serverId)) {
+            return { error: "Invalid serverId", status: 400 };
+        }
+
+        const guild = client.guilds.cache.get(serverId)
+            || await client.guilds.fetch(serverId).catch(() => null);
+        if (!guild) {
+            return { error: "Guild not found", status: 404 };
+        }
+
+        return { guild, guildId: serverId };
+    }
+
     // Returns the exact key used in casesData.cases that matches the given id,
     // trying exact → uppercase → case-insensitive scan so old keys like
     // "CASE-000NaN" are still found even when the caller uppercases them.
@@ -213,6 +254,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         let members  = [];
         let channels = [];
         let servers = [];
+        let membersByServer = {};
         let channelsByServer = {};
 
         if (guild) {
@@ -237,10 +279,18 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
         const depts = getAllDepartments();
         for (const [guildId, deptInfo] of Object.entries(depts)) {
             try {
-                const g = await client.guilds.fetch(guildId);
+                const g = client.guilds.cache.get(guildId)
+                    || await client.guilds.fetch(guildId);
                 if (g) {
                     servers.push({ id: guildId, name: g.name, shortName: deptInfo.shortName });
+                    await g.members.fetch();
                     await g.channels.fetch();
+
+                    membersByServer[guildId] = [...g.members.cache.values()]
+                        .filter(m => !m.user.bot)
+                        .map(m => ({ id: m.id, name: m.displayName || m.user.username }))
+                        .sort((a, b) => a.name.localeCompare(b.name));
+
                     channelsByServer[guildId] = [...g.channels.cache.values()]
                         .filter(c => c?.isTextBased() && !c.isDMBased() && c.type !== 4)
                         .map(c => ({ id: c.id, name: c.name, parent: c.parent?.name || "Uncategorized", guildId: guildId }))
@@ -249,6 +299,15 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             } catch (e) {
                 console.error(`[Dashboard] Failed to fetch guild ${guildId}:`, e.message);
             }
+        }
+
+        if (guild && !servers.some(s => s.id === guild.id)) {
+            servers.unshift({ id: guild.id, name: guild.name, shortName: "MAIN" });
+        }
+
+        if (guild) {
+            if (!membersByServer[guild.id]) membersByServer[guild.id] = members;
+            if (!channelsByServer[guild.id]) channelsByServer[guild.id] = channels;
         }
 
         const allCases = Object.entries(casesData.cases || {})
@@ -275,6 +334,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             members,
             channels,
             servers,
+            membersByServer,
             channelsByServer,
             openCases,
             allCases,
@@ -646,14 +706,14 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Strike ───────────────────────────────────────────────────────────
     router.post("/api/commands/strike", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const { userId, reason } = req.body;
+            const { userId, reason, serverId } = req.body;
             if (!userId || !reason) return res.status(400).json({ error: "Missing userId or reason" });
-            if (!GUILD_ID) return res.status(400).json({ error: "GUILD_ID not configured" });
 
-            const guild = client.guilds.cache.get(GUILD_ID);
-            if (!guild) return res.status(404).json({ error: "Guild not found" });
+            const guildResult = await resolveCommandGuild(serverId);
+            if (guildResult.error) return res.status(guildResult.status).json({ error: guildResult.error });
+            const { guild, guildId } = guildResult;
 
-            const entries = getUserStrikeEntries(GUILD_ID, userId);
+            const entries = getUserStrikeEntries(guildId, userId);
             if (entries.length >= MAX_STRIKES) {
                 return res.status(400).json({ error: `User already has ${MAX_STRIKES}/${MAX_STRIKES} strikes` });
             }
@@ -662,7 +722,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             await syncUserStrikeRoles(guild, userId, entries.length);
 
             await sendDashboardActionLog({
-                guildId: GUILD_ID,
+                guildId,
                 logType: "strike",
                 title: "⚖️ Dashboard Strike Added",
                 fields: [
@@ -684,21 +744,21 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Strike Remove ────────────────────────────────────────────────────
     router.post("/api/commands/strike-remove", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const { userId, amount } = req.body;
+            const { userId, amount, serverId } = req.body;
             if (!userId) return res.status(400).json({ error: "Missing userId" });
-            if (!GUILD_ID) return res.status(400).json({ error: "GUILD_ID not configured" });
 
-            const guild = client.guilds.cache.get(GUILD_ID);
-            if (!guild) return res.status(404).json({ error: "Guild not found" });
+            const guildResult = await resolveCommandGuild(serverId);
+            if (guildResult.error) return res.status(guildResult.status).json({ error: guildResult.error });
+            const { guild, guildId } = guildResult;
 
-            const entries = getUserStrikeEntries(GUILD_ID, userId);
+            const entries = getUserStrikeEntries(guildId, userId);
             const remove  = Math.min(parseInt(amount) || 1, entries.length);
             entries.splice(entries.length - remove, remove);
             saveStrikes();
             await syncUserStrikeRoles(guild, userId, entries.length);
 
             await sendDashboardActionLog({
-                guildId: GUILD_ID,
+                guildId,
                 logType: "strike",
                 title: "🧹 Dashboard Strike Removed",
                 fields: [
@@ -720,19 +780,19 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Ban ──────────────────────────────────────────────────────────────
     router.post("/api/commands/ban", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const { userId, reason } = req.body;
+            const { userId, reason, serverId } = req.body;
             if (!userId || !reason) return res.status(400).json({ error: "Missing userId or reason" });
-            if (!GUILD_ID) return res.status(400).json({ error: "GUILD_ID not configured" });
 
-            const guild = client.guilds.cache.get(GUILD_ID);
-            if (!guild) return res.status(404).json({ error: "Guild not found" });
+            const guildResult = await resolveCommandGuild(serverId);
+            if (guildResult.error) return res.status(guildResult.status).json({ error: guildResult.error });
+            const { guild, guildId } = guildResult;
 
             await guild.members.ban(userId, {
                 reason: `Dashboard ban by ${req.session.user.username}: ${reason}`
             });
 
             await sendDashboardActionLog({
-                guildId: GUILD_ID,
+                guildId,
                 logType: "ban",
                 title: "🔨 Dashboard Ban",
                 fields: [
@@ -753,12 +813,12 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Kick ─────────────────────────────────────────────────────────────
     router.post("/api/commands/kick", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const { userId, reason } = req.body;
+            const { userId, reason, serverId } = req.body;
             if (!userId || !reason) return res.status(400).json({ error: "Missing userId or reason" });
-            if (!GUILD_ID) return res.status(400).json({ error: "GUILD_ID not configured" });
 
-            const guild  = client.guilds.cache.get(GUILD_ID);
-            if (!guild)  return res.status(404).json({ error: "Guild not found" });
+            const guildResult = await resolveCommandGuild(serverId);
+            if (guildResult.error) return res.status(guildResult.status).json({ error: guildResult.error });
+            const { guild, guildId } = guildResult;
 
             const member = await guild.members.fetch(userId).catch(() => null);
             if (!member)         return res.status(404).json({ error: "Member not found in guild" });
@@ -767,7 +827,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             await member.kick(`Dashboard kick by ${req.session.user.username}: ${reason}`);
 
             await sendDashboardActionLog({
-                guildId: GUILD_ID,
+                guildId,
                 logType: "moderation",
                 title: "👢 Dashboard Kick",
                 fields: [
@@ -788,12 +848,12 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Timeout ──────────────────────────────────────────────────────────
     router.post("/api/commands/timeout", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const { userId, minutes, reason } = req.body;
+            const { userId, minutes, reason, serverId } = req.body;
             if (!userId || !minutes) return res.status(400).json({ error: "Missing userId or minutes" });
-            if (!GUILD_ID) return res.status(400).json({ error: "GUILD_ID not configured" });
 
-            const guild  = client.guilds.cache.get(GUILD_ID);
-            if (!guild)  return res.status(404).json({ error: "Guild not found" });
+            const guildResult = await resolveCommandGuild(serverId);
+            if (guildResult.error) return res.status(guildResult.status).json({ error: guildResult.error });
+            const { guild, guildId } = guildResult;
 
             const member = await guild.members.fetch(userId).catch(() => null);
             if (!member)             return res.status(404).json({ error: "Member not found in guild" });
@@ -803,7 +863,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             await member.timeout(ms, `Dashboard timeout by ${req.session.user.username}: ${reason || "No reason"}`);
 
             await sendDashboardActionLog({
-                guildId: GUILD_ID,
+                guildId,
                 logType: "timeout",
                 title: "⏱️ Dashboard Timeout",
                 fields: [
@@ -825,17 +885,17 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Unban ────────────────────────────────────────────────────────────
     router.post("/api/commands/unban", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const { userId, reason } = req.body;
+            const { userId, reason, serverId } = req.body;
             if (!userId) return res.status(400).json({ error: "Missing userId" });
-            if (!GUILD_ID) return res.status(400).json({ error: "GUILD_ID not configured" });
 
-            const guild = client.guilds.cache.get(GUILD_ID);
-            if (!guild) return res.status(404).json({ error: "Guild not found" });
+            const guildResult = await resolveCommandGuild(serverId);
+            if (guildResult.error) return res.status(guildResult.status).json({ error: guildResult.error });
+            const { guild, guildId } = guildResult;
 
             await guild.bans.remove(userId, reason || `Unbanned via dashboard by ${req.session.user.username}`);
 
             await sendDashboardActionLog({
-                guildId: GUILD_ID,
+                guildId,
                 logType: "moderation",
                 title: "🔓 Dashboard Unban",
                 fields: [
@@ -856,12 +916,12 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
     // ── API: Purge ────────────────────────────────────────────────────────────
     router.post("/api/commands/purge", requireStaff, segmentGuard("commands"), async (req, res) => {
         try {
-            const { channelId, amount } = req.body;
+            const { channelId, amount, serverId } = req.body;
             if (!channelId || !amount) return res.status(400).json({ error: "Missing channelId or amount" });
-            if (!GUILD_ID) return res.status(400).json({ error: "GUILD_ID not configured" });
 
-            const guild = await getDashboardGuild();
-            if (!guild) return res.status(404).json({ error: "Guild not found" });
+            const guildResult = await resolveCommandGuild(serverId);
+            if (guildResult.error) return res.status(guildResult.status).json({ error: guildResult.error });
+            const { guild, guildId } = guildResult;
 
             const channel = await guild.channels.fetch(channelId).catch(() => null);
             if (!channel?.isTextBased()) return res.status(404).json({ error: "Text channel not found" });
@@ -870,7 +930,7 @@ export function createMainRoutes(context, { requireAuth, requireStaff, getDashbo
             const deleted = await channel.bulkDelete(count, true);
 
             await sendDashboardActionLog({
-                guildId: GUILD_ID,
+                guildId,
                 logType: "moderation",
                 title: "🧹 Dashboard Purge",
                 fields: [
