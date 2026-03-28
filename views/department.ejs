@@ -910,15 +910,6 @@
       });
     });
 
-    // Secondary binding so create still works even if inline onclick is blocked.
-    (function bindDepartmentCreateButton(){
-      var createBtn = document.getElementById('dc-create-btn');
-      if (!createBtn) return;
-      createBtn.addEventListener('click', function(){
-        deptCaseCreate();
-      });
-    })();
-
 </script>
 
 <%- include('partials/footer') %>
